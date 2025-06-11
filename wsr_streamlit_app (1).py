@@ -80,7 +80,7 @@ if uploaded_file:
     st.subheader("Figure 9. pH by Site")
     st.pyplot(fig)
 
-    # --- Figure 10: Transparency by Site with Colored Outlines ---
+    # --- Figure 10: Transparency - Outline Colored Boxplots ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -89,42 +89,33 @@ if uploaded_file:
     )
 
     fig, ax = plt.subplots(figsize=(12, 6))
-    palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
 
+    # رسم باکس‌پلات‌ها بدون رنگ داخلی
+    palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
     sns.boxplot(
         data=transparency_df,
         x='Site ID',
         y='Transparency (m)',
         hue='Transparency Type',
         ax=ax,
-        linewidth=2,
-        fliersize=4,
-        palette={key: 'white' for key in palette},  # داخل سفید
-        boxprops=dict(facecolor='white'),
-        showcaps=True,
-        dodge=True
+        palette=palette,
+        fliersize=4
     )
 
-    # رنگ خط دور هر نوع ترنسپرنسی
-    for i, artist in enumerate(ax.artists):
-        trans_type = transparency_df['Transparency Type'].unique()[i % 2]
-        color = palette[trans_type]
-        artist.set_edgecolor(color)
-        artist.set_linewidth(2)
+    # حذف رنگ داخلی و فقط حفظ رنگ خط دور
+    for patch, (_, row) in zip(ax.artists, transparency_df[['Transparency Type']].drop_duplicates().iterrows()):
+        method = row['Transparency Type']
+        patch.set_facecolor('none')  # بدون رنگ داخلی
+        patch.set_edgecolor(palette[method])
+        patch.set_linewidth(2)
 
-    # median lines, whiskers, caps
-    for line in ax.lines:
-        line.set_color('black')
-        line.set_linewidth(1.5)
-
-    ax.set_ylabel("Transparency (meters)")
+    ax.set_ylabel('Transparency (meters)')
     ax.set_title("Figure 10. Transparency by Site")
-    ax.legend(title='Method', loc='center left', bbox_to_anchor=(1.0, 0.5))
+    ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
     ax.set_ylim(0, 0.7)
     fig.tight_layout()
-
     save_figure(fig, "Figure10_Transparency_Boxplot.png")
-    st.subheader("Figure 10. Transparency by Site (Outlined Boxplots)")
+    st.subheader("Figure 10. Transparency by Site")
     st.pyplot(fig)
 
 
