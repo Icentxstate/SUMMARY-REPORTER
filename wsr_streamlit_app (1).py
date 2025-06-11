@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,7 +7,6 @@ import zipfile
 from io import BytesIO
 
 st.set_page_config(page_title='WSR Graph Generator', layout='wide')
-
 st.title("📊 Watershed Summary Report Graph Generator")
 
 uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx")
@@ -16,12 +14,12 @@ uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
+    # --- Prepare columns ---
     df['Sample Date'] = pd.to_datetime(df['Sample Date'])
     df['Site ID'] = df['Site ID: Site Name'].astype(str)
     df['Water Temp Rounded'] = pd.to_numeric(df['Water Temp Rounded'], errors='coerce')
     df['Conductivity'] = pd.to_numeric(df['Conductivity (?S/cm)'], errors='coerce')
     df['TDS (mg/L)'] = df['Conductivity'] * 0.65
-
     df['DO1'] = pd.to_numeric(df['DO1 Rounded'], errors='coerce')
     df['DO2'] = pd.to_numeric(df['DO2 Rounded'], errors='coerce')
     df['DO_avg'] = df[['DO1', 'DO2']].mean(axis=1)
@@ -32,66 +30,80 @@ if uploaded_file:
 
     output_dir = "wsr_figures"
     os.makedirs(output_dir, exist_ok=True)
+
     def save_figure(fig, filename):
         fig.savefig(os.path.join(output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close(fig)
 
-    # Figure 6 - Water Temp
+    # --- Figure 6: Water Temp ---
     fig, ax = plt.subplots(figsize=(14, 6))
     sns.scatterplot(data=df, x='Sample Date', y='Water Temp Rounded', hue='Site ID', s=40, ax=ax)
     ax.axhline(y=32.2, color='red', linestyle='--')
     ax.text(df['Sample Date'].min(), 32.6, 'WQS = 32.2°C', color='red')
-    ax.set_title('Figure 6. Water Temperature Over Time by Site')
     ax.set_xlabel('Sample Date')
     ax.set_ylabel('Water Temperature (°C)')
     ax.grid(True)
+    ax.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), title="Site ID")
     save_figure(fig, "Figure6_WaterTemperature.png")
+    st.subheader("Figure 6. Water Temperature Over Time by Site")
+    st.pyplot(fig)
 
-    # Figure 7 - TDS
+    # --- Figure 7: TDS ---
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='TDS (mg/L)', color='white', fliersize=4, ax=ax)
     ax.axhline(y=500, color='red', linestyle='--')
     ax.text(-0.4, 510, 'WQS = 500 mg/L', color='red')
-    ax.set_title('Figure 7. TDS by Site')
     ax.set_ylabel('TDS (mg/L)')
     save_figure(fig, "Figure7_TDS_Boxplot.png")
+    st.subheader("Figure 7. TDS by Site")
+    st.pyplot(fig)
 
-    # Figure 8 - DO
+    # --- Figure 8: DO ---
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='DO_avg', color='white', fliersize=4, ax=ax)
     ax.axhline(y=5.0, color='red', linestyle='--')
     ax.text(-0.4, 5.1, 'WQS = 5.0 mg/L', color='red')
-    ax.set_title('Figure 8. Dissolved Oxygen by Site')
     ax.set_ylabel('Dissolved Oxygen (mg/L)')
     save_figure(fig, "Figure8_DO_Boxplot.png")
+    st.subheader("Figure 8. Dissolved Oxygen by Site")
+    st.pyplot(fig)
 
-    # Figure 9 - pH
+    # --- Figure 9: pH ---
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='pH', color='white', fliersize=4, ax=ax)
     ax.axhline(y=9.0, color='red', linestyle='--')
     ax.axhline(y=6.5, color='red', linestyle='--')
     ax.text(-0.4, 9.1, 'WQS Max = 9.0', color='red')
     ax.text(-0.4, 6.6, 'WQS Min = 6.5', color='red')
-    ax.set_title('Figure 9. pH by Site')
     ax.set_ylabel('pH (standard units)')
     save_figure(fig, "Figure9_pH_Boxplot.png")
+    st.subheader("Figure 9. pH by Site")
+    st.pyplot(fig)
 
-    # Figure 10 - Transparency
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=df, x='Site ID', y='Secchi', color='skyblue', fliersize=4, ax=ax)
-    sns.boxplot(data=df, x='Site ID', y='Transparency Tube', color='lightgreen', fliersize=4, ax=ax)
-    ax.set_title('Figure 10. Transparency by Site')
+    # --- Figure 10: Transparency ---
+    transparency_df = df.melt(
+        id_vars=['Site ID'],
+        value_vars=['Secchi', 'Transparency Tube'],
+        var_name='Transparency Type',
+        value_name='Transparency (m)'
+    )
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.boxplot(data=transparency_df, x='Site ID', y='Transparency (m)', hue='Transparency Type', ax=ax)
     ax.set_ylabel('Transparency (m)')
+    ax.legend(title='Method', loc='center left', bbox_to_anchor=(1.0, 0.5))
     save_figure(fig, "Figure10_Transparency_Boxplot.png")
+    st.subheader("Figure 10. Transparency by Site")
+    st.pyplot(fig)
 
-    # Figure 11 - Total Depth
+    # --- Figure 11: Total Depth ---
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='Total Depth', color='white', fliersize=4, ax=ax)
-    ax.set_title('Figure 11. Total Depth by Site')
     ax.set_ylabel('Total Depth (m)')
     save_figure(fig, "Figure11_TotalDepth_Boxplot.png")
+    st.subheader("Figure 11. Total Depth by Site")
+    st.pyplot(fig)
 
-    # Climate chart (Figure #)
+    # --- Climate chart ---
     months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     precipitation = [2.2, 3.2, 3.9, 4.3, 5.3, 4.1, 2.6, 2.8, 3.4, 4.6, 3.3, 3.0]
     temperature = [7.2, 9.5, 13.8, 18.2, 23.3, 27.8, 29.7, 29.4, 25.1, 18.9, 12.4, 8.4]
@@ -102,11 +114,12 @@ if uploaded_file:
     ax2 = ax1.twinx()
     ax2.set_ylabel('Precipitation (inches)', color='blue')
     ax2.bar(months, precipitation, color='blue', alpha=0.7)
-    ax1.set_title('Figure #: Monthly Avg Precipitation and Temperature in Denton County')
     fig.tight_layout()
     save_figure(fig, "Figure_MonthlyClimate.png")
+    st.subheader("Figure #: Monthly Avg Precipitation and Temperature in Denton County")
+    st.pyplot(fig)
 
-    # ایجاد فایل ZIP
+    # --- Create ZIP for download ---
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zipf:
         for file in os.listdir(output_dir):
