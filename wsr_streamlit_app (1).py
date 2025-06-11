@@ -80,7 +80,7 @@ if uploaded_file:
     st.subheader("Figure 9. pH by Site")
     st.pyplot(fig)
 
-    # --- Figure 10: Transparency - Outline Color Only (No Fill), Colored Outliers ---
+    # --- Figure 10: Transparency with White Fill and Colored Edges ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -89,50 +89,44 @@ if uploaded_file:
     )
 
     fig, ax = plt.subplots(figsize=(12, 6))
-
     palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
 
-    # رسم باکس‌پلات‌ها
-    sns.boxplot(
+    # رسم اولیه
+    box = sns.boxplot(
         data=transparency_df,
         x='Site ID',
         y='Transparency (m)',
         hue='Transparency Type',
         ax=ax,
-        palette=palette,
         linewidth=2,
-        fliersize=5,
-        boxprops=dict(facecolor='none'),  # بدون رنگ داخلی
-        medianprops=dict(color='black'),
-        whiskerprops=dict(color='black'),
-        capprops=dict(color='black'),
-        flierprops=dict(marker='o', markersize=5, linestyle='none')  # رنگش رو دستی تنظیم می‌کنیم
+        fliersize=0,  # حذف outlier پیش‌فرض
+        palette=palette
     )
 
-    # تنظیم رنگ خط دور باکس‌ها برای هر پارامتر
+    # سفید کردن داخل و رنگی کردن لبه
     for i, artist in enumerate(ax.artists):
-        method = list(palette.keys())[i % 2]  # Secchi یا Tube
-        color = palette[method]
-        artist.set_edgecolor(color)
-        artist.set_facecolor('none')
+        col = artist.get_edgecolor()
+        artist.set_facecolor('white')
+        artist.set_edgecolor(col)
         artist.set_linewidth(2)
 
-    # تنظیم رنگ نقاط بیرونی (outliers)
-    flier_lines = [line for idx, line in enumerate(ax.lines) if idx % 6 in [4, 5]]  # flier lines
-    for idx, line in enumerate(flier_lines):
-        method = list(palette.keys())[idx % 2]
-        line.set_color(palette[method])
+    # رسم دستی نقاط outlier (رنگی بر اساس پارامتر)
+    from matplotlib.patches import PathPatch
+    import numpy as np
 
-    ax.set_ylabel('Transparency Tube & Secchi Disk (meters)')
-    ax.set_title("Figure 10. Transparency by Site")
+    # لیبل‌های legend
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles=handles, labels=labels, title='Method', loc='center left', bbox_to_anchor=(1.0, 0.5))
+
+    # تعیین مقیاس y
     ax.set_ylim(0, 0.7)
-    ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
-    fig.tight_layout()
+    ax.set_ylabel('Transparency (meters)')
+    ax.set_title("Figure 10. Transparency by Site")
 
+    fig.tight_layout()
     save_figure(fig, "Figure10_Transparency_Boxplot.png")
     st.subheader("Figure 10. Transparency by Site")
     st.pyplot(fig)
-
 
     # --- Figure 11: Total Depth ---
     fig, ax = plt.subplots(figsize=(10, 6))
