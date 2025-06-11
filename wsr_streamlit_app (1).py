@@ -80,25 +80,36 @@ if uploaded_file:
     st.subheader("Figure 9. pH by Site")
     st.pyplot(fig)
 
-    # --- Figure 10: Transparency - Separate Subplots ---
-    fig, axs = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
+    # --- Figure 10: Transparency - Grouped Boxplots with Hue ---
+    # آماده‌سازی دیتا برای نمایش دوتایی
+    transparency_df = df.melt(
+        id_vars=['Site ID'],
+        value_vars=['Secchi', 'Transparency Tube'],
+        var_name='Transparency Type',
+        value_name='Transparency (m)'
+    )
 
-    sns.boxplot(data=df, x='Site ID', y='Secchi', ax=axs[0], color='skyblue', fliersize=4)
-    axs[0].set_title("Secchi Disk")
-    axs[0].set_ylabel("Transparency (meters)")
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.boxplot(
+        data=transparency_df,
+        x='Site ID',
+        y='Transparency (m)',
+        hue='Transparency Type',
+        ax=ax,
+        palette={'Secchi': 'skyblue', 'Transparency Tube': 'lightcoral'},
+        fliersize=4
+    )
 
-    sns.boxplot(data=df, x='Site ID', y='Transparency Tube', ax=axs[1], color='lightcoral', fliersize=4)
-    axs[1].set_title("Transparency Tube")
-    axs[1].set_ylabel("")  # حذف تکرار محور y
+    ax.set_ylabel('Transparency (meters)')
+    ax.set_title("Figure 10. Transparency by Site")
+    ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
+    ax.set_ylim(0, 0.7)  # اطمینان از نمایش کامل مقادیر
 
-    for ax in axs:
-        ax.set_ylim(0, 0.7)  # تنظیم دقیق مقیاس y
-
-    fig.suptitle("Figure 10. Transparency by Site (Separate Panels)", fontsize=14)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # فاصله مناسب برای عنوان بالا
-    save_figure(fig, "Figure10_Transparency_Separate.png")
-    st.subheader("Figure 10. Transparency by Site (Separate Panels)")
+    fig.tight_layout()
+    save_figure(fig, "Figure10_Transparency_Boxplot.png")
+    st.subheader("Figure 10. Transparency by Site")
     st.pyplot(fig)
+
 
     # --- Figure 11: Total Depth ---
     fig, ax = plt.subplots(figsize=(10, 6))
