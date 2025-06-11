@@ -80,7 +80,7 @@ if uploaded_file:
     st.subheader("Figure 9. pH by Site")
     st.pyplot(fig)
 
-    # --- Figure 10: Transparency with Outline-Colored Boxes and Colored Outliers ---
+     # --- Figure 10: Transparency with Matching Colored Boxes and Outliers ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -99,27 +99,26 @@ if uploaded_file:
         hue='Transparency Type',
         ax=ax,
         palette=palette,
-        showcaps=True,
-        boxprops=dict(facecolor='none'),  # بدون رنگ داخلی
-        medianprops=dict(color='black'),
-        whiskerprops=dict(color='black'),
-        flierprops=dict(marker='o', markersize=5, linestyle='none')  # بعداً رنگی می‌کنیم
+        fliersize=5,
+        linewidth=2
     )
 
-    # رنگی کردن لبه‌های باکس‌ها و نقطه‌های outlier
-    # هر transparency type دو باکس کنار هم داره، پس باید به صورت زوج-فرد تکرار بشن
-    num_boxes = len(ax.artists)
+    # تغییر رنگ خط بیرونی و outliers برای تطابق با رنگ داخلی
     for i, artist in enumerate(ax.artists):
         transparency_type = list(palette.keys())[i % 2]
         color = palette[transparency_type]
         artist.set_edgecolor(color)
+        artist.set_facecolor(color)
         artist.set_linewidth(2)
 
-    # تنظیم رنگ نقطه‌ها بر اساس ترتیب ترسیم
-    for line, artist_idx in zip(ax.lines, range(len(ax.lines))):
-        transparency_type = list(palette.keys())[artist_idx % 2]
-        color = palette[transparency_type]
-        line.set_color(color)
+    # تغییر رنگ outlier ها (نقاط بیرونی)
+    # ترتیب خطوط در matplotlib: medians, caps, whiskers, fliers
+    num_lines = len(ax.lines)
+    for i, line in enumerate(ax.lines):
+        if i % 6 == 4 or i % 6 == 5:  # flier lines (there are 6 lines per box)
+            transparency_type = list(palette.keys())[i % 2]
+            color = palette[transparency_type]
+            line.set_color(color)
 
     ax.set_ylabel('Transparency (meters)')
     ax.set_title("Figure 10. Transparency by Site")
