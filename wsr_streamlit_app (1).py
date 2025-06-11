@@ -68,19 +68,7 @@ if uploaded_file:
     st.subheader("Figure 8. Dissolved Oxygen by Site")
     st.pyplot(fig)
 
-    # --- Figure 9: pH ---
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=df, x='Site ID', y='pH', color='white', fliersize=4, ax=ax)
-    ax.axhline(y=9.0, color='red', linestyle='--')
-    ax.axhline(y=6.5, color='red', linestyle='--')
-    ax.text(-0.4, 9.1, 'WQS Max = 9.0', color='red')
-    ax.text(-0.4, 6.6, 'WQS Min = 6.5', color='red')
-    ax.set_ylabel('pH (standard units)')
-    save_figure(fig, "Figure9_pH_Boxplot.png")
-    st.subheader("Figure 9. pH by Site")
-    st.pyplot(fig)
-
-    # --- Figure 10: Transparency with White Fill and Colored Edges ---
+    # --- Figure 10: Transparency with Colored Edges, White Fill, and Colored Outliers ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -91,42 +79,65 @@ if uploaded_file:
     fig, ax = plt.subplots(figsize=(12, 6))
     palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
 
-    # رسم اولیه
-    box = sns.boxplot(
+    # رسم boxplot بدون outlierها
+    sns.boxplot(
         data=transparency_df,
         x='Site ID',
         y='Transparency (m)',
         hue='Transparency Type',
         ax=ax,
+        palette=palette,
         linewidth=2,
-        fliersize=0,  # حذف outlier پیش‌فرض
-        palette=palette
+        fliersize=0  # outliers رو دستی رسم می‌کنیم
     )
 
-    # سفید کردن داخل و رنگی کردن لبه
+    # سفید کردن داخل باکس و رنگی کردن لبه‌ها
+    num_boxes = len(ax.artists)
     for i, artist in enumerate(ax.artists):
-        col = artist.get_edgecolor()
+        # هر artist یک box هست
         artist.set_facecolor('white')
-        artist.set_edgecolor(col)
+        artist.set_edgecolor(palette[list(palette.keys())[i % 2]])
         artist.set_linewidth(2)
 
-    # رسم دستی نقاط outlier (رنگی بر اساس پارامتر)
-    from matplotlib.patches import PathPatch
-    import numpy as np
+    # رسم دستی outliers (نقاط بیرون از باکس‌پلات)
+    # ابتدا گروه‌بندی دیتا
+    grouped = transparency_df.groupby(['Site ID', 'Transparency Type'])
+    positions = {}
+    for i, (site, param) in enumerate(grouped.groups.keys()):
+        pos = list(transparency_df['Site ID'].unique()).index(site)  # x position
+        shift = -0.2 if param == 'Secchi' else 0.2
+        x_val = pos + shift
+        values = grouped.get_group((site, param))['Transparency (m)'].dropna()
 
-    # لیبل‌های legend
-    handles, labels = ax.get_legend_handles_labels()
-    ax.legend(handles=handles, labels=labels, title='Method', loc='center left', bbox_to_anchor=(1.0, 0.5))
+        # محاسبه IQR و حد آوتلایرها
+        q1 = values.quantile(0.25)
+        q3 = values.quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        outliers = values[(values < lower) | (values > upper)]
 
-    # تعیین مقیاس y
-    ax.set_ylim(0, 0.7)
+        ax.scatter(
+            [x_val] * len(outliers),
+            outliers,
+            color=palette[param],
+            alpha=0.7,
+            s=30,
+            edgecolors='k',
+            linewidths=0.5
+        )
+
+    # تنظیمات نهایی
     ax.set_ylabel('Transparency (meters)')
+    ax.set_ylim(0, 0.7)
     ax.set_title("Figure 10. Transparency by Site")
-
+    ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
     fig.tight_layout()
+
     save_figure(fig, "Figure10_Transparency_Boxplot.png")
     st.subheader("Figure 10. Transparency by Site")
     st.pyplot(fig)
+
 
     # --- Figure 11: Total Depth ---
     fig, ax = plt.subplots(figsize=(10, 6))
