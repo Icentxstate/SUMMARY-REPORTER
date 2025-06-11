@@ -80,7 +80,7 @@ if uploaded_file:
     st.subheader("Figure 9. pH by Site")
     st.pyplot(fig)
 
-     # --- Figure 10: Transparency with Matching Colored Boxes and Outliers ---
+    # --- Figure 10: Transparency - Outline Color Only (No Fill), Colored Outliers ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -92,35 +92,38 @@ if uploaded_file:
 
     palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
 
-    box = sns.boxplot(
+    # رسم باکس‌پلات‌ها
+    sns.boxplot(
         data=transparency_df,
         x='Site ID',
         y='Transparency (m)',
         hue='Transparency Type',
         ax=ax,
         palette=palette,
+        linewidth=2,
         fliersize=5,
-        linewidth=2
+        boxprops=dict(facecolor='none'),  # بدون رنگ داخلی
+        medianprops=dict(color='black'),
+        whiskerprops=dict(color='black'),
+        capprops=dict(color='black'),
+        flierprops=dict(marker='o', markersize=5, linestyle='none')  # رنگش رو دستی تنظیم می‌کنیم
     )
 
-    # تغییر رنگ خط بیرونی و outliers برای تطابق با رنگ داخلی
+    # تنظیم رنگ خط دور باکس‌ها برای هر پارامتر
     for i, artist in enumerate(ax.artists):
-        transparency_type = list(palette.keys())[i % 2]
-        color = palette[transparency_type]
+        method = list(palette.keys())[i % 2]  # Secchi یا Tube
+        color = palette[method]
         artist.set_edgecolor(color)
-        artist.set_facecolor(color)
+        artist.set_facecolor('none')
         artist.set_linewidth(2)
 
-    # تغییر رنگ outlier ها (نقاط بیرونی)
-    # ترتیب خطوط در matplotlib: medians, caps, whiskers, fliers
-    num_lines = len(ax.lines)
-    for i, line in enumerate(ax.lines):
-        if i % 6 == 4 or i % 6 == 5:  # flier lines (there are 6 lines per box)
-            transparency_type = list(palette.keys())[i % 2]
-            color = palette[transparency_type]
-            line.set_color(color)
+    # تنظیم رنگ نقاط بیرونی (outliers)
+    flier_lines = [line for idx, line in enumerate(ax.lines) if idx % 6 in [4, 5]]  # flier lines
+    for idx, line in enumerate(flier_lines):
+        method = list(palette.keys())[idx % 2]
+        line.set_color(palette[method])
 
-    ax.set_ylabel('Transparency (meters)')
+    ax.set_ylabel('Transparency Tube & Secchi Disk (meters)')
     ax.set_title("Figure 10. Transparency by Site")
     ax.set_ylim(0, 0.7)
     ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
