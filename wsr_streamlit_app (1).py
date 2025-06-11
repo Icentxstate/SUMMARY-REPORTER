@@ -80,7 +80,7 @@ if uploaded_file:
     st.subheader("Figure 9. pH by Site")
     st.pyplot(fig)
 
-    # --- Figure 10: Transparency - Outline Colored Boxplots ---
+    # --- Figure 10: Transparency with Outline-Colored Boxes and Colored Outliers ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -90,30 +90,43 @@ if uploaded_file:
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # رسم باکس‌پلات‌ها بدون رنگ داخلی
     palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
-    sns.boxplot(
+
+    box = sns.boxplot(
         data=transparency_df,
         x='Site ID',
         y='Transparency (m)',
         hue='Transparency Type',
         ax=ax,
         palette=palette,
-        fliersize=4
+        showcaps=True,
+        boxprops=dict(facecolor='none'),  # بدون رنگ داخلی
+        medianprops=dict(color='black'),
+        whiskerprops=dict(color='black'),
+        flierprops=dict(marker='o', markersize=5, linestyle='none')  # بعداً رنگی می‌کنیم
     )
 
-    # حذف رنگ داخلی و فقط حفظ رنگ خط دور
-    for patch, (_, row) in zip(ax.artists, transparency_df[['Transparency Type']].drop_duplicates().iterrows()):
-        method = row['Transparency Type']
-        patch.set_facecolor('none')  # بدون رنگ داخلی
-        patch.set_edgecolor(palette[method])
-        patch.set_linewidth(2)
+    # رنگی کردن لبه‌های باکس‌ها و نقطه‌های outlier
+    # هر transparency type دو باکس کنار هم داره، پس باید به صورت زوج-فرد تکرار بشن
+    num_boxes = len(ax.artists)
+    for i, artist in enumerate(ax.artists):
+        transparency_type = list(palette.keys())[i % 2]
+        color = palette[transparency_type]
+        artist.set_edgecolor(color)
+        artist.set_linewidth(2)
+
+    # تنظیم رنگ نقطه‌ها بر اساس ترتیب ترسیم
+    for line, artist_idx in zip(ax.lines, range(len(ax.lines))):
+        transparency_type = list(palette.keys())[artist_idx % 2]
+        color = palette[transparency_type]
+        line.set_color(color)
 
     ax.set_ylabel('Transparency (meters)')
     ax.set_title("Figure 10. Transparency by Site")
-    ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
     ax.set_ylim(0, 0.7)
+    ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
     fig.tight_layout()
+
     save_figure(fig, "Figure10_Transparency_Boxplot.png")
     st.subheader("Figure 10. Transparency by Site")
     st.pyplot(fig)
