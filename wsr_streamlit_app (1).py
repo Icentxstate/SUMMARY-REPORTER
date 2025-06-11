@@ -111,6 +111,7 @@ if uploaded_file:
     st.pyplot(fig)
 
 
+
     # --- Figure 11: Total Depth ---
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='Total Depth', color='white', fliersize=4, ax=ax)
