@@ -68,7 +68,7 @@ if uploaded_file:
     st.subheader("Figure 8. Dissolved Oxygen by Site")
     st.pyplot(fig)
 
-    # --- Figure 10: Transparency with Colored Borders and White Fill ---
+    # --- Figure 10: Transparency - Fully Colored Outlines and Lines ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -79,7 +79,6 @@ if uploaded_file:
     fig, ax = plt.subplots(figsize=(12, 6))
     palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
 
-    # رسم اولیه بدون آوتلایر
     sns.boxplot(
         data=transparency_df,
         x='Site ID',
@@ -88,27 +87,31 @@ if uploaded_file:
         ax=ax,
         palette=palette,
         linewidth=2,
-        fliersize=0
+        fliersize=0  # outliers manually plotted
     )
 
-    # تعداد باکس‌ها (2 باکس در هر دسته = 2*hue * n_site)
-    num_boxes = len(ax.artists)
+    # تعداد باکس‌ها و رنگ‌دهی کامل
+    n_boxes = len(ax.artists)
+    hues = list(palette.keys())
+
     for i, artist in enumerate(ax.artists):
-        param = list(palette.keys())[i % 2]
+        param = hues[i % 2]
         color = palette[param]
 
-        # رنگ‌بندی باکس‌ها
+        # رنگ‌دهی outline
         artist.set_facecolor('white')
         artist.set_edgecolor(color)
         artist.set_linewidth(2)
 
-        # هر باکس‌پلات 6 خط داره: median, whiskers, caps
+        # رنگ‌دهی 6 خط مربوط به این باکس (median, whiskers, caps)
         for j in range(6):
-            line = ax.lines[i*6 + j]
-            line.set_color(color)
-            line.set_linewidth(2)
+            line_idx = i * 6 + j
+            if line_idx < len(ax.lines):
+                line = ax.lines[line_idx]
+                line.set_color(color)
+                line.set_linewidth(2)
 
-    # آوتلایرهای رنگی
+    # رسم outlier با رنگ پارامتر
     grouped = transparency_df.groupby(['Site ID', 'Transparency Type'])
     for (site, param), group in grouped:
         pos = list(df['Site ID'].unique()).index(site)
@@ -127,14 +130,15 @@ if uploaded_file:
             [x_val] * len(outliers),
             outliers,
             color=palette[param],
+            s=30,
             edgecolors='k',
             linewidths=0.5,
-            s=30,
-            alpha=0.9,
+            alpha=0.85,
             zorder=10
         )
 
-    ax.set_ylabel("Transparency (meters)")
+    # نهایی‌سازی شکل
+    ax.set_ylabel('Transparency (meters)')
     ax.set_ylim(0, 0.7)
     ax.set_title("Figure 10. Transparency by Site")
     ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
@@ -143,7 +147,6 @@ if uploaded_file:
     save_figure(fig, "Figure10_Transparency_Boxplot.png")
     st.subheader("Figure 10. Transparency by Site")
     st.pyplot(fig)
-
 
 
     # --- Figure 11: Total Depth ---
