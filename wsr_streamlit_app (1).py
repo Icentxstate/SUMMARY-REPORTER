@@ -68,7 +68,7 @@ if uploaded_file:
     st.subheader("Figure 8. Dissolved Oxygen by Site")
     st.pyplot(fig)
 
-    # --- Figure 10: Transparency with Colored Edges, White Fill, and Colored Outliers ---
+    # --- Figure 10: Transparency with Full Custom Coloring ---
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -79,8 +79,8 @@ if uploaded_file:
     fig, ax = plt.subplots(figsize=(12, 6))
     palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
 
-    # رسم boxplot بدون outlierها
-    sns.boxplot(
+    # ترسیم اولیه بدون نمایش آوتلایر
+    sns_plot = sns.boxplot(
         data=transparency_df,
         x='Site ID',
         y='Transparency (m)',
@@ -88,28 +88,33 @@ if uploaded_file:
         ax=ax,
         palette=palette,
         linewidth=2,
-        fliersize=0  # outliers رو دستی رسم می‌کنیم
+        fliersize=0  # آوتلایرها رو دستی می‌سازیم
     )
 
-    # سفید کردن داخل باکس و رنگی کردن لبه‌ها
-    num_boxes = len(ax.artists)
-    for i, artist in enumerate(ax.artists):
-        # هر artist یک box هست
+    # رنگی کردن outline، خط میانی، whisker و cap به رنگ پارامتر
+    for i, (artist, line) in enumerate(zip(ax.artists, ax.lines[::6])):
+        param_index = i % 2
+        param = list(palette.keys())[param_index]
+        color = palette[param]
         artist.set_facecolor('white')
-        artist.set_edgecolor(palette[list(palette.keys())[i % 2]])
+        artist.set_edgecolor(color)
         artist.set_linewidth(2)
 
-    # رسم دستی outliers (نقاط بیرون از باکس‌پلات)
-    # ابتدا گروه‌بندی دیتا
+        # خطوط: هر boxplot 6 خط داره: [median, whisker low, whisker high, cap low, cap high, hidden]
+        for j in range(6):
+            line_index = i * 6 + j
+            ax.lines[line_index].set_color(color)
+            ax.lines[line_index].set_linewidth(2)
+
+    # رسم دستی آوتلایرها با رنگ مربوط به پارامتر
     grouped = transparency_df.groupby(['Site ID', 'Transparency Type'])
-    positions = {}
-    for i, (site, param) in enumerate(grouped.groups.keys()):
-        pos = list(transparency_df['Site ID'].unique()).index(site)  # x position
+    for (site, param), group in grouped:
+        pos = list(df['Site ID'].unique()).index(site)
         shift = -0.2 if param == 'Secchi' else 0.2
         x_val = pos + shift
-        values = grouped.get_group((site, param))['Transparency (m)'].dropna()
+        values = group['Transparency (m)'].dropna()
 
-        # محاسبه IQR و حد آوتلایرها
+        # محاسبه IQR برای شناسایی آوتلایر
         q1 = values.quantile(0.25)
         q3 = values.quantile(0.75)
         iqr = q3 - q1
@@ -121,10 +126,11 @@ if uploaded_file:
             [x_val] * len(outliers),
             outliers,
             color=palette[param],
-            alpha=0.7,
             s=30,
             edgecolors='k',
-            linewidths=0.5
+            linewidths=0.5,
+            alpha=0.8,
+            zorder=10
         )
 
     # تنظیمات نهایی
