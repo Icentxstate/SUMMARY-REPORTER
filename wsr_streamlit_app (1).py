@@ -35,6 +35,7 @@ if uploaded_file:
         plt.close(fig)
 
     # --- Generate Figures ---
+    # Figure 6: Water Temp
     fig6, ax = plt.subplots(figsize=(14, 6))
     sns.scatterplot(data=df, x='Sample Date', y='Water Temp Rounded', hue='Site ID', s=40, ax=ax)
     ax.axhline(y=32.2, color='red', linestyle='--')
@@ -45,6 +46,7 @@ if uploaded_file:
     ax.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), title="Site ID")
     save_figure(fig6, "Figure6_WaterTemperature.png")
 
+    # Figure 7: TDS
     fig7, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='TDS (mg/L)', color='white', fliersize=4, ax=ax)
     ax.axhline(y=500, color='red', linestyle='--')
@@ -52,6 +54,7 @@ if uploaded_file:
     ax.set_ylabel('TDS (mg/L)')
     save_figure(fig7, "Figure7_TDS_Boxplot.png")
 
+    # Figure 8: DO
     fig8, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='DO_avg', color='white', fliersize=4, ax=ax)
     ax.axhline(y=5.0, color='red', linestyle='--')
@@ -59,13 +62,7 @@ if uploaded_file:
     ax.set_ylabel('Dissolved Oxygen (mg/L)')
     save_figure(fig8, "Figure8_DO_Boxplot.png")
 
-    transparency_df = df.melt(
-        id_vars=['Site ID'],
-        value_vars=['Secchi', 'Transparency Tube'],
-        var_name='Transparency Type',
-        value_name='Transparency (m)'
-    )
-# Figure 10: Transparency
+    # Figure 10: Transparency
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -118,11 +115,13 @@ if uploaded_file:
     fig10.tight_layout()
     save_figure(fig10, "Figure10_Transparency_Boxplot.png")
 
+    # Figure 11: Total Depth
     fig11, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='Total Depth', color='white', fliersize=4, ax=ax)
     ax.set_ylabel('Total Depth (m)')
     save_figure(fig11, "Figure11_TotalDepth_Boxplot.png")
 
+    # Monthly Climate
     months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     precipitation = [2.2, 3.2, 3.9, 4.3, 5.3, 4.1, 2.6, 2.8, 3.4, 4.6, 3.3, 3.0]
     temperature = [7.2, 9.5, 13.8, 18.2, 23.3, 27.8, 29.7, 29.4, 25.1, 18.9, 12.4, 8.4]
