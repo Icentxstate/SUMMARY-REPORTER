@@ -14,16 +14,14 @@ uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # --- Prepare columns for calculations ---
+    # --- Prepare columns ---
     df['Sample Date'] = pd.to_datetime(df['Sample Date'])
     df['Site ID'] = df['Site ID: Site Name'].astype(str)
-
-    # Create consistent/expected columns for Table 6
     df['Air Temp Rounded'] = pd.to_numeric(df['Air Temperature (° C)'], errors='coerce')
-    df['DO_avg'] = pd.to_numeric(df['Dissolved Oxygen (mg/L) Average'], errors='coerce')
+    df['Water Temp Rounded'] = pd.to_numeric(df.get('Water Temp Rounded'), errors='coerce')
     df['Conductivity'] = pd.to_numeric(df['Conductivity (?S/cm)'], errors='coerce')
     df['TDS (mg/L)'] = df['Conductivity'] * 0.65
-    df['Water Temp Rounded'] = pd.to_numeric(df.get('Water Temp Rounded'), errors='coerce')
+    df['DO_avg'] = pd.to_numeric(df['Dissolved Oxygen (mg/L) Average'], errors='coerce')
     df['pH'] = pd.to_numeric(df.get('pH Rounded'), errors='coerce')
     df['Secchi'] = pd.to_numeric(df.get('Secchi Disk Transparency - Average'), errors='coerce')
     df['Transparency Tube'] = pd.to_numeric(df.get('Transparency Tube (meters)'), errors='coerce')
@@ -36,7 +34,7 @@ if uploaded_file:
         fig.savefig(os.path.join(output_dir, filename), dpi=300, bbox_inches='tight')
         plt.close(fig)
 
-    # --- Figure 6: Water Temp
+    # --- Generate Figures ---
     fig6, ax = plt.subplots(figsize=(14, 6))
     sns.scatterplot(data=df, x='Sample Date', y='Water Temp Rounded', hue='Site ID', s=40, ax=ax)
     ax.axhline(y=32.2, color='red', linestyle='--')
@@ -47,7 +45,6 @@ if uploaded_file:
     ax.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), title="Site ID")
     save_figure(fig6, "Figure6_WaterTemperature.png")
 
-    # --- Figure 7: TDS
     fig7, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='TDS (mg/L)', color='white', fliersize=4, ax=ax)
     ax.axhline(y=500, color='red', linestyle='--')
@@ -55,7 +52,6 @@ if uploaded_file:
     ax.set_ylabel('TDS (mg/L)')
     save_figure(fig7, "Figure7_TDS_Boxplot.png")
 
-    # --- Figure 8: DO
     fig8, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='DO_avg', color='white', fliersize=4, ax=ax)
     ax.axhline(y=5.0, color='red', linestyle='--')
@@ -63,7 +59,13 @@ if uploaded_file:
     ax.set_ylabel('Dissolved Oxygen (mg/L)')
     save_figure(fig8, "Figure8_DO_Boxplot.png")
 
-    # --- Figure 10: Transparency
+    transparency_df = df.melt(
+        id_vars=['Site ID'],
+        value_vars=['Secchi', 'Transparency Tube'],
+        var_name='Transparency Type',
+        value_name='Transparency (m)'
+    )
+# Figure 10: Transparency
     transparency_df = df.melt(
         id_vars=['Site ID'],
         value_vars=['Secchi', 'Transparency Tube'],
@@ -82,6 +84,33 @@ if uploaded_file:
         linewidth=2,
         fliersize=0
     )
+    for i, artist in enumerate(ax.artists):
+        artist.set_facecolor('white')
+        artist.set_edgecolor(palette[list(palette.keys())[i % 2]])
+        artist.set_linewidth(2)
+
+    grouped = transparency_df.groupby(['Site ID', 'Transparency Type'])
+    for (site, param), values in grouped:
+        pos = list(transparency_df['Site ID'].unique()).index(site)
+        shift = -0.2 if param == 'Secchi' else 0.2
+        x_val = pos + shift
+        values = values['Transparency (m)'].dropna()
+        q1 = values.quantile(0.25)
+        q3 = values.quantile(0.75)
+        iqr = q3 - q1
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        outliers = values[(values < lower) | (values > upper)]
+        ax.scatter(
+            [x_val] * len(outliers),
+            outliers,
+            color=palette[param],
+            alpha=0.7,
+            s=30,
+            edgecolors='k',
+            linewidths=0.5
+        )
+
     ax.set_ylabel('Transparency (meters)')
     ax.set_ylim(0, 0.7)
     ax.set_title("Figure 10. Transparency by Site")
@@ -89,13 +118,11 @@ if uploaded_file:
     fig10.tight_layout()
     save_figure(fig10, "Figure10_Transparency_Boxplot.png")
 
-    # --- Figure 11: Total Depth
     fig11, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(data=df, x='Site ID', y='Total Depth', color='white', fliersize=4, ax=ax)
     ax.set_ylabel('Total Depth (m)')
     save_figure(fig11, "Figure11_TotalDepth_Boxplot.png")
 
-    # --- Monthly Climate Chart
     months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     precipitation = [2.2, 3.2, 3.9, 4.3, 5.3, 4.1, 2.6, 2.8, 3.4, 4.6, 3.3, 3.0]
     temperature = [7.2, 9.5, 13.8, 18.2, 23.3, 27.8, 29.7, 29.4, 25.1, 18.9, 12.4, 8.4]
@@ -109,7 +136,7 @@ if uploaded_file:
     fig_climate.tight_layout()
     save_figure(fig_climate, "Figure_MonthlyClimate.png")
 
-    # --- Table 6: Summary Statistics
+    # --- Table 6 Summary Statistics ---
     st.markdown("## 📋 Table 6. Summary Statistics by Site and Parameter")
 
     site_event_counts = df.groupby('Site ID').size()
@@ -130,7 +157,7 @@ if uploaded_file:
     summary_rows = []
     for label, column in param_map.items():
         for stat in ['Mean', 'Std Dev', 'Range']:
-            row = {'Parameter': label, 'Statistic': stat}
+            row = {'Parameter': label if stat == 'Mean' else '', 'Statistic': stat}
             for site in valid_sites:
                 values = df_valid[df_valid['Site ID'] == site][column].dropna()
                 if len(values) >= 10:
@@ -147,12 +174,24 @@ if uploaded_file:
 
     summary_df = pd.DataFrame(summary_rows)
 
-    # Save Table 6 as CSV
+    # Save to CSV
     table6_path = os.path.join(output_dir, "Table6_Summary.csv")
     summary_df.to_csv(table6_path, index=False)
-    st.dataframe(summary_df.style.set_properties(**{'text-align': 'center'}), use_container_width=True)
 
-    # --- ZIP creation with all figures + table
+    # Format like Word: only show parameter name once per group
+    def style_word_format(df):
+        styled = df.copy()
+        styled['Parameter'] = styled['Parameter'].mask(styled['Parameter'] == "").ffill().mask(styled['Statistic'] != "Mean", "")
+        return styled
+
+    styled_df = style_word_format(summary_df).style\
+        .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center'), ('font-weight', 'bold')]}])\
+        .set_properties(**{'text-align': 'center', 'border': '1px solid gray', 'padding': '6px'})\
+        .apply(lambda x: ['background-color: #f5f5fa' if x['Statistic'] == 'Mean' else '' for _ in x], axis=1)
+
+    st.dataframe(styled_df, use_container_width=True)
+
+    # --- ZIP download button ---
     st.markdown("## 📦 Download All Results (Figures + Table 6)")
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zipf:
@@ -163,7 +202,7 @@ if uploaded_file:
     st.download_button("📥 Download ZIP", data=zip_buffer, file_name="WSR_All_Results.zip", mime="application/zip")
     st.success("✅ All outputs successfully generated.")
 
-    # --- Show all charts
+    # --- Show charts
     st.subheader("Figure 6. Water Temperature Over Time by Site")
     st.pyplot(fig6)
 
