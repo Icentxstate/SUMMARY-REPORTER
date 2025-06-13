@@ -14,20 +14,20 @@ uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # --- Prepare columns ---
+    # --- Prepare columns for calculations ---
     df['Sample Date'] = pd.to_datetime(df['Sample Date'])
     df['Site ID'] = df['Site ID: Site Name'].astype(str)
-    df['Water Temp Rounded'] = pd.to_numeric(df['Water Temp Rounded'], errors='coerce')
+
+    # Create consistent/expected columns for Table 6
+    df['Air Temp Rounded'] = pd.to_numeric(df['Air Temperature (° C)'], errors='coerce')
+    df['DO_avg'] = pd.to_numeric(df['Dissolved Oxygen (mg/L) Average'], errors='coerce')
     df['Conductivity'] = pd.to_numeric(df['Conductivity (?S/cm)'], errors='coerce')
     df['TDS (mg/L)'] = df['Conductivity'] * 0.65
-    df['DO1'] = pd.to_numeric(df['DO1 Rounded'], errors='coerce')
-    df['DO2'] = pd.to_numeric(df['DO2 Rounded'], errors='coerce')
-    df['DO_avg'] = df[['DO1', 'DO2']].mean(axis=1)
-    df['pH'] = pd.to_numeric(df['pH Rounded'], errors='coerce')
-    df['Secchi'] = pd.to_numeric(df['Secchi Disk Transparency - Average'], errors='coerce')
-    df['Transparency Tube'] = pd.to_numeric(df['Transparency Tube (meters)'], errors='coerce')
-    df['Total Depth'] = pd.to_numeric(df['Total Depth (meters)'], errors='coerce')
-    df['Air Temp Rounded'] = pd.to_numeric(df['Air Temp Rounded'], errors='coerce')
+    df['Water Temp Rounded'] = pd.to_numeric(df.get('Water Temp Rounded'), errors='coerce')
+    df['pH'] = pd.to_numeric(df.get('pH Rounded'), errors='coerce')
+    df['Secchi'] = pd.to_numeric(df.get('Secchi Disk Transparency - Average'), errors='coerce')
+    df['Transparency Tube'] = pd.to_numeric(df.get('Transparency Tube (meters)'), errors='coerce')
+    df['Total Depth'] = pd.to_numeric(df.get('Total Depth (meters)'), errors='coerce')
 
     output_dir = "wsr_figures"
     os.makedirs(output_dir, exist_ok=True)
@@ -82,33 +82,6 @@ if uploaded_file:
         linewidth=2,
         fliersize=0
     )
-    for i, artist in enumerate(ax.artists):
-        artist.set_facecolor('white')
-        artist.set_edgecolor(palette[list(palette.keys())[i % 2]])
-        artist.set_linewidth(2)
-
-    grouped = transparency_df.groupby(['Site ID', 'Transparency Type'])
-    for (site, param), values in grouped:
-        pos = list(transparency_df['Site ID'].unique()).index(site)
-        shift = -0.2 if param == 'Secchi' else 0.2
-        x_val = pos + shift
-        values = values['Transparency (m)'].dropna()
-        q1 = values.quantile(0.25)
-        q3 = values.quantile(0.75)
-        iqr = q3 - q1
-        lower = q1 - 1.5 * iqr
-        upper = q3 + 1.5 * iqr
-        outliers = values[(values < lower) | (values > upper)]
-        ax.scatter(
-            [x_val] * len(outliers),
-            outliers,
-            color=palette[param],
-            alpha=0.7,
-            s=30,
-            edgecolors='k',
-            linewidths=0.5
-        )
-
     ax.set_ylabel('Transparency (meters)')
     ax.set_ylim(0, 0.7)
     ax.set_title("Figure 10. Transparency by Site")
@@ -122,7 +95,7 @@ if uploaded_file:
     ax.set_ylabel('Total Depth (m)')
     save_figure(fig11, "Figure11_TotalDepth_Boxplot.png")
 
-    # --- Figure: Monthly Climate
+    # --- Monthly Climate Chart
     months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     precipitation = [2.2, 3.2, 3.9, 4.3, 5.3, 4.1, 2.6, 2.8, 3.4, 4.6, 3.3, 3.0]
     temperature = [7.2, 9.5, 13.8, 18.2, 23.3, 27.8, 29.7, 29.4, 25.1, 18.9, 12.4, 8.4]
@@ -136,7 +109,7 @@ if uploaded_file:
     fig_climate.tight_layout()
     save_figure(fig_climate, "Figure_MonthlyClimate.png")
 
-    # --- Table 6: Summary Stats by Site and Parameter ---
+    # --- Table 6: Summary Statistics
     st.markdown("## 📋 Table 6. Summary Statistics by Site and Parameter")
 
     site_event_counts = df.groupby('Site ID').size()
@@ -155,7 +128,6 @@ if uploaded_file:
     }
 
     summary_rows = []
-
     for label, column in param_map.items():
         for stat in ['Mean', 'Std Dev', 'Range']:
             row = {'Parameter': label, 'Statistic': stat}
@@ -175,27 +147,23 @@ if uploaded_file:
 
     summary_df = pd.DataFrame(summary_rows)
 
-    # Save to CSV in output_dir
+    # Save Table 6 as CSV
     table6_path = os.path.join(output_dir, "Table6_Summary.csv")
     summary_df.to_csv(table6_path, index=False)
-
-    # Show table in app
     st.dataframe(summary_df.style.set_properties(**{'text-align': 'center'}), use_container_width=True)
 
-    # --- Create and Show ZIP download button ---
-    st.markdown("## 📥 Download All Results (Figures + Table 6)")
-
+    # --- ZIP creation with all figures + table
+    st.markdown("## 📦 Download All Results (Figures + Table 6)")
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zipf:
         for file in os.listdir(output_dir):
             filepath = os.path.join(output_dir, file)
             zipf.write(filepath, arcname=file)
     zip_buffer.seek(0)
-    st.download_button("📦 Download All (ZIP)", data=zip_buffer, file_name="WSR_All_Results.zip", mime="application/zip")
+    st.download_button("📥 Download ZIP", data=zip_buffer, file_name="WSR_All_Results.zip", mime="application/zip")
+    st.success("✅ All outputs successfully generated.")
 
-    st.success("✅ All figures and summary table generated successfully.")
-
-    # --- Show charts
+    # --- Show all charts
     st.subheader("Figure 6. Water Temperature Over Time by Site")
     st.pyplot(fig6)
 
@@ -211,5 +179,5 @@ if uploaded_file:
     st.subheader("Figure 11. Total Depth by Site")
     st.pyplot(fig11)
 
-    st.subheader("Figure #: Monthly Avg Precipitation and Temperature in Denton County")
+    st.subheader("Figure #: Monthly Avg Precipitation and Temperature")
     st.pyplot(fig_climate)
