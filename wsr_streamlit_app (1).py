@@ -164,3 +164,55 @@ if uploaded_file:
 
     st.subheader("Figure #: Monthly Avg Precipitation and Temperature in Denton County")
     st.pyplot(fig_climate)
+    
+
+# --- Table 6: Texas Stream Team Summary Table ---
+
+st.subheader("📋 Table 6. Summary Statistics for Valid Sites (≥10 Samples)")
+
+# 1. فیلتر فقط سایت‌هایی که ≥10 نمونه دارند
+site_event_counts = df.groupby('Site ID').size()
+valid_sites = site_event_counts[site_event_counts >= 10].index
+df_valid = df[df['Site ID'].isin(valid_sites)]
+
+# 2. پارامترهایی که برای جدول ۶ لازم هستند
+param_map = {
+    'Air Temperature (°C)': 'Air Temp Rounded',
+    'Water Temperature (°C)': 'Water Temp Rounded',
+    'Dissolved Oxygen (mg/L)': 'DO_avg',
+    'pH (standard units)': 'pH',
+    'TDS (mg/L)': 'TDS (mg/L)',
+    'Secchi Disk Transparency (m)': 'Secchi',
+    'Transparency Tube (m)': 'Transparency Tube',
+    'Total Depth (m)': 'Total Depth',
+}
+
+summary_rows = []
+
+for label, column in param_map.items():
+    for stat in ['Mean', 'Std Dev', 'Range']:
+        row = {'Parameter': label, 'Statistic': stat}
+        for site in valid_sites:
+            values = df_valid[df_valid['Site ID'] == site][column].dropna()
+            if len(values) >= 10:
+                if stat == 'Mean':
+                    val = round(values.mean(), 2)
+                elif stat == 'Std Dev':
+                    val = round(values.std(), 2)
+                elif stat == 'Range':
+                    val = round(values.max() - values.min(), 2)
+            else:
+                val = 'ND'  # Not enough data
+            row[site] = val
+        summary_rows.append(row)
+
+# 3. ساخت دیتافریم نهایی
+summary_df = pd.DataFrame(summary_rows)
+
+# 4. نمایش در Streamlit
+st.dataframe(summary_df.style.set_properties(**{'text-align': 'center'}), use_container_width=True)
+
+# 5. دکمه دانلود CSV
+csv_data = summary_df.to_csv(index=False).encode('utf-8')
+st.download_button("📥 Download Table 6 as CSV", data=csv_data, file_name="Table6_Summary.csv", mime='text/csv')
+
