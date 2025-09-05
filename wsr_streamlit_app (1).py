@@ -15,7 +15,6 @@ uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx
 
 # ================== Helpers ==================
 def get_col(df, *candidates):
-    """Return the first existing column among candidates; else empty Series."""
     for c in candidates:
         if c in df.columns:
             return df[c]
@@ -28,7 +27,6 @@ def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
 
 def save_figure(fig, path):
-    """Save figure but DO NOT close (we'll close after rendering in Streamlit)."""
     fig.savefig(path, dpi=300, bbox_inches='tight')
 
 def style_axes(ax, xlabel='', ylabel='', site_order=None):
@@ -53,11 +51,6 @@ def find_first_name(df, names):
 
 # ===== Monthly Climate builder (from Excel, no hard-coded arrays) =====
 def build_monthly_climate_from_df(df):
-    """
-    Build monthly climate dataframe with columns:
-    MonthNum (1..12), optional TempMeanC, optional Precip
-    using Sample Date + Air/Water Temperature + Rainfall Accumulation if present.
-    """
     date_col = find_first_name(df, ['Sample Date', 'Date', 'SampleDate', 'Datetime'])
     if date_col is None:
         return None
@@ -147,7 +140,7 @@ if uploaded_file:
     WQS_TEMP = 32.2
     WQS_TDS  = 500
     WQS_DO   = 5.0
-    WQS_pH_MIN, WQS_pH_MAX = 6.5, 9.0   # adjust if your standard differs
+    WQS_pH_MIN, WQS_pH_MAX = 6.5, 9.0   # در صورت نیاز تغییر بده
 
     # Site order as encountered
     site_order = list(pd.unique(df['Site ID']))
@@ -172,10 +165,10 @@ if uploaded_file:
     fig7, ax = plt.subplots(figsize=(10, 6))
     ax.boxplot(series_by_site(df, site_order, 'TDS (mg/L)'),
                patch_artist=False, whis=1.5,
-               medianprops=dict(color='black', linewidth=1.5),
-               whiskerprops=dict(color='black', linewidth=1.2),
-               capprops=dict(color='black', linewidth=1.2),
-               boxprops=dict(color='black', linewidth=1.5),
+               medianprops=dict(color='black', linewidth=1.2),
+               whiskerprops=dict(color='black', linewidth=1.0),
+               capprops=dict(color='black', linewidth=1.0),
+               boxprops=dict(color='black', linewidth=1.3),
                flierprops=dict(marker='o', markersize=4,
                                markerfacecolor='black', markeredgecolor='black'))
     style_axes(ax, 'Site ID', 'TDS (mg/L)', site_order)
@@ -187,10 +180,10 @@ if uploaded_file:
     fig8, ax = plt.subplots(figsize=(10, 6))
     ax.boxplot(series_by_site(df, site_order, 'DO_avg'),
                patch_artist=False, whis=1.5,
-               medianprops=dict(color='black', linewidth=1.5),
-               whiskerprops=dict(color='black', linewidth=1.2),
-               capprops=dict(color='black', linewidth=1.2),
-               boxprops=dict(color='black', linewidth=1.5),
+               medianprops=dict(color='black', linewidth=1.2),
+               whiskerprops=dict(color='black', linewidth=1.0),
+               capprops=dict(color='black', linewidth=1.0),
+               boxprops=dict(color='black', linewidth=1.3),
                flierprops=dict(marker='o', markersize=4,
                                markerfacecolor='black', markeredgecolor='black'))
     style_axes(ax, 'Site ID', 'Dissolved Oxygen (mg/L)', site_order)
@@ -202,10 +195,10 @@ if uploaded_file:
     fig_ph, ax = plt.subplots(figsize=(10, 6))
     ax.boxplot(series_by_site(df, site_order, 'pH'),
                patch_artist=False, whis=1.5,
-               medianprops=dict(color='black', linewidth=1.5),
-               whiskerprops=dict(color='black', linewidth=1.2),
-               capprops=dict(color='black', linewidth=1.2),
-               boxprops=dict(color='black', linewidth=1.5),
+               medianprops=dict(color='black', linewidth=1.2),
+               whiskerprops=dict(color='black', linewidth=1.0),
+               capprops=dict(color='black', linewidth=1.0),
+               boxprops=dict(color='black', linewidth=1.3),
                flierprops=dict(marker='o', markersize=4,
                                markerfacecolor='black', markeredgecolor='black'))
     style_axes(ax, 'Site ID', 'pH (standard units)', site_order)
@@ -215,10 +208,11 @@ if uploaded_file:
     ax.text(0.5, WQS_pH_MIN + 0.03, 'WQS Min', color='red', va='bottom')
     save_figure(fig_ph, os.path.join(output_dir, "Figure9_pH_Boxplot.png"))
 
-    # ================== Figure 10: Transparency (double boxplots + points) ==================
+    # ================== Figure 10: Transparency (reference-like) ==================
     trans_df = df.melt(id_vars=['Site ID'],
                        value_vars=['Secchi', 'Transparency Tube'],
                        var_name='Type', value_name='Value').dropna()
+
     fig10, ax = plt.subplots(figsize=(12, 6))
     pos = np.arange(1, len(site_order)+1)
     offset = 0.18
@@ -228,31 +222,19 @@ if uploaded_file:
     for t in ['Secchi', 'Transparency Tube']:
         data_t = [trans_df[(trans_df['Site ID'].eq(s)) & (trans_df['Type'].eq(t))]['Value']
                   .dropna().values for s in site_order]
-        ax.boxplot(data_t,
-                   positions=pos + type2shift[t],
-                   widths=0.28, patch_artist=False, whis=1.5,
-                   medianprops=dict(color='black', linewidth=1.5),
-                   whiskerprops=dict(color=type2color[t], linewidth=1.2),
-                   capprops=dict(color=type2color[t], linewidth=1.2),
-                   boxprops=dict(color=type2color[t], linewidth=1.5),
-                   flierprops=dict(marker='o', markersize=0))  # fliers we draw manually
-
-        for i, s in enumerate(site_order):
-            vals = trans_df[(trans_df['Site ID'].eq(s)) & (trans_df['Type'].eq(t))]['Value'].dropna().values
-            if len(vals) == 0:
-                continue
-            q1, q3 = np.percentile(vals, [25, 75])
-            iqr = q3 - q1
-            lo, hi = q1 - 1.5*iqr, q3 + 1.5*iqr
-            outliers = vals[(vals < lo) | (vals > hi)]
-            x_all = np.full_like(vals, pos[i] + type2shift[t], dtype=float)
-            x_all = x_all + np.random.uniform(-0.02, 0.02, size=len(vals))
-            ax.scatter(x_all, vals, s=28, color=type2color[t], alpha=0.85,
-                       edgecolors='k', linewidths=0.4)
-            if len(outliers):
-                x_out = np.full_like(outliers, pos[i] + type2shift[t], dtype=float)
-                ax.scatter(x_out, outliers, s=32, color=type2color[t],
-                           alpha=0.95, edgecolors='k', linewidths=0.5)
+        ax.boxplot(
+            data_t,
+            positions=pos + type2shift[t],
+            widths=0.28,
+            patch_artist=True, whis=1.5,
+            medianprops=dict(color='black', linewidth=1.2),
+            whiskerprops=dict(color=type2color[t], linewidth=1.0),
+            capprops=dict(color=type2color[t], linewidth=1.0),
+            boxprops=dict(facecolor='white', edgecolor=type2color[t], linewidth=1.5),
+            # فقط آوتلایرها (مثل نمونه)، با رنگ مخصوص هر نوع
+            flierprops=dict(marker='o', markersize=4,
+                            markerfacecolor=type2color[t], markeredgecolor='black')
+        )
 
     style_axes(ax, 'Site ID', 'Transparency (meters)', site_order)
     ax.set_ylim(0, 0.62)
@@ -265,10 +247,10 @@ if uploaded_file:
     fig11, ax = plt.subplots(figsize=(10, 6))
     ax.boxplot(series_by_site(df, site_order, 'Total Depth'),
                patch_artist=False, whis=1.5,
-               medianprops=dict(color='black', linewidth=1.5),
-               whiskerprops=dict(color='black', linewidth=1.2),
-               capprops=dict(color='black', linewidth=1.2),
-               boxprops=dict(color='black', linewidth=1.5),
+               medianprops=dict(color='black', linewidth=1.2),
+               whiskerprops=dict(color='black', linewidth=1.0),
+               capprops=dict(color='black', linewidth=1.0),
+               boxprops=dict(color='black', linewidth=1.3),
                flierprops=dict(marker='o', markersize=4,
                                markerfacecolor='black', markeredgecolor='black'))
     style_axes(ax, 'Site ID', 'Total Depth (m)', site_order)
@@ -277,8 +259,7 @@ if uploaded_file:
     # ================== Monthly Climate (from Excel) ==================
     monthly_climate = build_monthly_climate_from_df(df)
     if monthly_climate is None:
-        st.warning("⚠️ نتوانستم داده‌های اقلیمی ماهانه را از فایل بسازم. "
-                   "لطفاً ستون‌های «Sample Date»، «Air Temperature (° C)» و/یا «Rainfall Accumulation» را بررسی کن.")
+        st.warning("⚠️ نتوانستم داده‌های اقلیمی ماهانه را از فایل بسازم. ستون‌های تاریخ/دما/بارش را بررسی کن.")
         fig_climate = None
     else:
         month_labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
