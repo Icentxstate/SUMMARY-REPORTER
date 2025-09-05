@@ -1,146 +1,318 @@
+# WSR Graph Generator (Exact Style, Excel-driven Climate)
+# -------------------------------------------------------
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-import os
-import zipfile
+import os, zipfile
 from io import BytesIO
 
+# ================== Streamlit Page ==================
 st.set_page_config(page_title='WSR Graph Generator', layout='wide')
-st.title("📊 Watershed Summary Report Graph Generator")
+st.title("📊 Watershed Summary Report Graph Generator (Exact Style)")
 
 uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx")
 
+# ================== Helpers ==================
+def get_col(df, *candidates):
+    """Return the first existing column among candidates; else empty Series."""
+    for c in candidates:
+        if c in df.columns:
+            return df[c]
+    return pd.Series([np.nan]*len(df), index=df.index)
+
+def to_num(s):
+    return pd.to_numeric(s, errors='coerce')
+
+def ensure_dir(path):
+    os.makedirs(path, exist_ok=True)
+
+def save_figure(fig, path):
+    """Save figure but DO NOT close (we'll close after rendering in Streamlit)."""
+    fig.savefig(path, dpi=300, bbox_inches='tight')
+
+def style_axes(ax, xlabel='', ylabel='', site_order=None):
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.grid(False)
+    ax.set_facecolor('white')
+    for sp in ax.spines.values():
+        sp.set_color('black')
+    if site_order is not None:
+        ax.set_xticks(range(1, len(site_order)+1))
+        ax.set_xticklabels(site_order)
+
+def series_by_site(df, site_order, ycol):
+    return [df.loc[df['Site ID'].eq(s), ycol].dropna().values for s in site_order]
+
+def find_first_name(df, names):
+    for n in names:
+        if n in df.columns:
+            return n
+    return None
+
+# ===== Monthly Climate builder (from Excel, no hard-coded arrays) =====
+def build_monthly_climate_from_df(df):
+    """
+    Build monthly climate dataframe with columns:
+    MonthNum (1..12), optional TempMeanC, optional Precip
+    using Sample Date + Air/Water Temperature + Rainfall Accumulation if present.
+    """
+    date_col = find_first_name(df, ['Sample Date', 'Date', 'SampleDate', 'Datetime'])
+    if date_col is None:
+        return None
+
+    temp_name = find_first_name(df, [
+        'Air Temperature (° C)', 'Air Temperature (°C)',
+        'Water Temperature (° C)', 'Water Temperature (°C)'
+    ])
+    ppt_name  = find_first_name(df, [
+        'Rainfall Accumulation', 'Precipitation', 'Rain', 'Rain (in)'
+    ])
+
+    tmp = df[[date_col]].copy()
+    tmp['__date__'] = pd.to_datetime(tmp[date_col], errors='coerce')
+    tmp = tmp.dropna(subset=['__date__']).sort_values('__date__')
+
+    if temp_name:
+        tmp['__temp__'] = to_num(df[temp_name])
+    if ppt_name:
+        tmp['__ppt__'] = to_num(df[ppt_name])
+
+    if ('__temp__' not in tmp and '__ppt__' not in tmp) or \
+       (tmp.get('__temp__', pd.Series(dtype=float)).notna().sum() == 0 and
+        tmp.get('__ppt__',  pd.Series(dtype=float)).notna().sum()  == 0):
+        return None
+
+    monthly = pd.DataFrame({'MonthNum': range(1, 13)})
+
+    if '__temp__' in tmp and tmp['__temp__'].notna().any():
+        t_month = (tmp.dropna(subset=['__temp__'])
+                     .set_index('__date__')['__temp__']
+                     .resample('M').mean())
+        t_month = (t_month.reset_index()
+                           .assign(MonthNum=lambda d: d['__date__'].dt.month)
+                           .groupby('MonthNum', as_index=False)['__temp__'].mean()
+                           .rename(columns={'__temp__': 'TempMeanC'}))
+        monthly = monthly.merge(t_month, on='MonthNum', how='left')
+
+    if '__ppt__' in tmp and tmp['__ppt__'].notna().any():
+        p_month = (tmp.dropna(subset=['__ppt__'])
+                     .set_index('__date__')['__ppt__']
+                     .resample('M').sum())
+        p_month = (p_month.reset_index()
+                           .assign(MonthNum=lambda d: d['__date__'].dt.month)
+                           .groupby('MonthNum', as_index=False)['__ppt__'].sum()
+                           .rename(columns={'__ppt__': 'Precip'}))
+        monthly = monthly.merge(p_month, on='MonthNum', how='left')
+
+    return monthly.sort_values('MonthNum')
+
+# ================== Main ==================
 if uploaded_file:
+    # ---------- Read ----------
     df = pd.read_excel(uploaded_file)
 
-    # --- Prepare columns ---
-    df['Sample Date'] = pd.to_datetime(df['Sample Date'])
-    df['Site ID'] = df['Site ID: Site Name'].astype(str)
-    df['Air Temp Rounded'] = pd.to_numeric(df['Air Temperature (° C)'], errors='coerce')
-    df['Water Temp Rounded'] = pd.to_numeric(df.get('Water Temp Rounded'), errors='coerce')
-    df['Conductivity'] = pd.to_numeric(df['Conductivity (?S/cm)'], errors='coerce')
-    df['TDS (mg/L)'] = df['Conductivity'] * 0.65
-    df['DO_avg'] = pd.to_numeric(df['Dissolved Oxygen (mg/L) Average'], errors='coerce')
-    df['pH'] = pd.to_numeric(df.get('pH Rounded'), errors='coerce')
-    df['Secchi'] = pd.to_numeric(df.get('Secchi Disk Transparency - Average'), errors='coerce')
-    df['Transparency Tube'] = pd.to_numeric(df.get('Transparency Tube (meters)'), errors='coerce')
-    df['Total Depth'] = pd.to_numeric(df.get('Total Depth (meters)'), errors='coerce')
+    # ---------- Prepare columns ----------
+    df['Sample Date'] = pd.to_datetime(get_col(df, 'Sample Date', 'Date', 'SampleDate'), errors='coerce')
+    df['Site ID']     = get_col(df, 'Site ID: Site Name', 'Site ID', 'Station ID').astype(str)
 
+    df['Air Temp Rounded']   = to_num(get_col(df, 'Air Temperature (° C)', 'Air Temperature (°C)', 'Air Temp Rounded'))
+    df['Water Temp Rounded'] = to_num(get_col(df, 'Water Temp Rounded', 'Water Temperature (° C)', 'Water Temperature (°C)'))
+
+    cond_col = get_col(df, 'Conductivity (µS/cm)', 'Conductivity (uS/cm)', 'Conductivity (?S/cm)', 'Conductivity')
+    df['Conductivity'] = to_num(cond_col)
+
+    tds_existing = get_col(df, 'TDS (mg/L)', 'Total Dissolved Solids (mg/L)')
+    if tds_existing.notna().sum() > 0:
+        df['TDS (mg/L)'] = to_num(tds_existing)
+    else:
+        df['TDS (mg/L)'] = df['Conductivity'] * 0.65
+
+    df['DO_avg'] = to_num(get_col(df, 'Dissolved Oxygen (mg/L) Average', 'DO_avg', 'Dissolved Oxygen (mg/L)'))
+    df['pH']     = to_num(get_col(df, 'pH Rounded', 'pH (standard units)', 'pH'))
+
+    df['Secchi']            = to_num(get_col(df, 'Secchi Disk Transparency - Average', 'Secchi Disk Transparency (m)', 'Secchi'))
+    df['Transparency Tube'] = to_num(get_col(df, 'Transparency Tube (meters)', 'Transparency Tube (m)'))
+    df['Total Depth']       = to_num(get_col(df, 'Total Depth (meters)', 'Total Depth (m)', 'Depth (m)'))
+
+    # Drop rows without Site ID
+    df = df[df['Site ID'].notna() & df['Site ID'].ne('')].copy()
+
+    # ---------- Output dir ----------
     output_dir = "wsr_figures"
-    os.makedirs(output_dir, exist_ok=True)
+    ensure_dir(output_dir)
 
-    def save_figure(fig, filename):
-        fig.savefig(os.path.join(output_dir, filename), dpi=300, bbox_inches='tight')
-        plt.close(fig)
+    # ---------- WQS Constants ----------
+    WQS_TEMP = 32.2
+    WQS_TDS  = 500
+    WQS_DO   = 5.0
+    WQS_pH_MIN, WQS_pH_MAX = 6.5, 9.0   # adjust if your standard differs
 
-    # --- Generate Figures ---
-    # Figure 6: Water Temp
+    # Site order as encountered
+    site_order = list(pd.unique(df['Site ID']))
+
+    # ================== Figure 6: Water Temperature (scatter time-series) ==================
     fig6, ax = plt.subplots(figsize=(14, 6))
-    sns.scatterplot(data=df, x='Sample Date', y='Water Temp Rounded', hue='Site ID', s=40, ax=ax)
-    ax.axhline(y=32.2, color='red', linestyle='--')
-    ax.text(df['Sample Date'].min(), 32.6, 'WQS = 32.2°C', color='red')
-    ax.set_xlabel('Sample Date')
-    ax.set_ylabel('Water Temperature (°C)')
-    ax.grid(True)
-    ax.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), title="Site ID")
-    save_figure(fig6, "Figure6_WaterTemperature.png")
+    markers = ['o', 's', '^', 'D', 'P', 'X', 'v', '<', '>']
+    for i, s in enumerate(site_order):
+        dsi = df[df['Site ID'].eq(s)]
+        ax.scatter(dsi['Sample Date'], dsi['Water Temp Rounded'],
+                   s=40, marker=markers[i % len(markers)], label=s)
+    ax.axhline(WQS_TEMP, linestyle='--', color='red', linewidth=1.5)
+    if df['Sample Date'].notna().any():
+        xmin = df['Sample Date'].min()
+        ax.text(xmin, WQS_TEMP + 0.5, 'WQS', color='red', va='bottom')
+    ax.set_xlabel('Sample Date'); ax.set_ylabel('Water Temperature (°C)')
+    ax.legend(title='Site ID', loc='center left', bbox_to_anchor=(1.0, 0.5))
+    ax.grid(False)
+    save_figure(fig6, os.path.join(output_dir, "Figure6_WaterTemperature.png"))
 
-    # Figure 7: TDS
+    # ================== Figure 7: TDS (boxplot exact style) ==================
     fig7, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=df, x='Site ID', y='TDS (mg/L)', color='white', fliersize=4, ax=ax)
-    ax.axhline(y=500, color='red', linestyle='--')
-    ax.text(-0.4, 510, 'WQS = 500 mg/L', color='red')
-    ax.set_ylabel('TDS (mg/L)')
-    save_figure(fig7, "Figure7_TDS_Boxplot.png")
+    ax.boxplot(series_by_site(df, site_order, 'TDS (mg/L)'),
+               patch_artist=False, whis=1.5,
+               medianprops=dict(color='black', linewidth=1.5),
+               whiskerprops=dict(color='black', linewidth=1.2),
+               capprops=dict(color='black', linewidth=1.2),
+               boxprops=dict(color='black', linewidth=1.5),
+               flierprops=dict(marker='o', markersize=4,
+                               markerfacecolor='black', markeredgecolor='black'))
+    style_axes(ax, 'Site ID', 'TDS (mg/L)', site_order)
+    ax.axhline(WQS_TDS, linestyle='--', color='red', linewidth=1.5)
+    ax.text(0.5, WQS_TDS + 10, 'WQS', color='red', va='bottom')
+    save_figure(fig7, os.path.join(output_dir, "Figure7_TDS_Boxplot.png"))
 
-    # Figure 8: DO
+    # ================== Figure 8: DO (boxplot exact style) ==================
     fig8, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=df, x='Site ID', y='DO_avg', color='white', fliersize=4, ax=ax)
-    ax.axhline(y=5.0, color='red', linestyle='--')
-    ax.text(-0.4, 5.1, 'WQS = 5.0 mg/L', color='red')
-    ax.set_ylabel('Dissolved Oxygen (mg/L)')
-    save_figure(fig8, "Figure8_DO_Boxplot.png")
+    ax.boxplot(series_by_site(df, site_order, 'DO_avg'),
+               patch_artist=False, whis=1.5,
+               medianprops=dict(color='black', linewidth=1.5),
+               whiskerprops=dict(color='black', linewidth=1.2),
+               capprops=dict(color='black', linewidth=1.2),
+               boxprops=dict(color='black', linewidth=1.5),
+               flierprops=dict(marker='o', markersize=4,
+                               markerfacecolor='black', markeredgecolor='black'))
+    style_axes(ax, 'Site ID', 'Dissolved Oxygen (mg/L)', site_order)
+    ax.axhline(WQS_DO, linestyle='--', color='red', linewidth=1.5)
+    ax.text(0.5, WQS_DO + 0.1, 'WQS', color='red', va='bottom')
+    save_figure(fig8, os.path.join(output_dir, "Figure8_DO_Boxplot.png"))
 
-    # Figure 10: Transparency
-    transparency_df = df.melt(
-        id_vars=['Site ID'],
-        value_vars=['Secchi', 'Transparency Tube'],
-        var_name='Transparency Type',
-        value_name='Transparency (m)'
-    )
+    # ================== Figure 9: pH (Min/Max WQS lines) ==================
+    fig_ph, ax = plt.subplots(figsize=(10, 6))
+    ax.boxplot(series_by_site(df, site_order, 'pH'),
+               patch_artist=False, whis=1.5,
+               medianprops=dict(color='black', linewidth=1.5),
+               whiskerprops=dict(color='black', linewidth=1.2),
+               capprops=dict(color='black', linewidth=1.2),
+               boxprops=dict(color='black', linewidth=1.5),
+               flierprops=dict(marker='o', markersize=4,
+                               markerfacecolor='black', markeredgecolor='black'))
+    style_axes(ax, 'Site ID', 'pH (standard units)', site_order)
+    ax.axhline(WQS_pH_MAX, linestyle='--', color='red', linewidth=1.5)
+    ax.axhline(WQS_pH_MIN, linestyle='--', color='red', linewidth=1.5)
+    ax.text(0.5, WQS_pH_MAX + 0.03, 'WQS Max', color='red', va='bottom')
+    ax.text(0.5, WQS_pH_MIN + 0.03, 'WQS Min', color='red', va='bottom')
+    save_figure(fig_ph, os.path.join(output_dir, "Figure9_pH_Boxplot.png"))
+
+    # ================== Figure 10: Transparency (double boxplots + points) ==================
+    trans_df = df.melt(id_vars=['Site ID'],
+                       value_vars=['Secchi', 'Transparency Tube'],
+                       var_name='Type', value_name='Value').dropna()
     fig10, ax = plt.subplots(figsize=(12, 6))
-    palette = {'Secchi': 'blue', 'Transparency Tube': 'red'}
-    sns.boxplot(
-        data=transparency_df,
-        x='Site ID',
-        y='Transparency (m)',
-        hue='Transparency Type',
-        ax=ax,
-        palette=palette,
-        linewidth=2,
-        fliersize=0
-    )
-    for i, artist in enumerate(ax.artists):
-        artist.set_facecolor('white')
-        artist.set_edgecolor(palette[list(palette.keys())[i % 2]])
-        artist.set_linewidth(2)
+    pos = np.arange(1, len(site_order)+1)
+    offset = 0.18
+    type2shift = {'Secchi': -offset, 'Transparency Tube': +offset}
+    type2color = {'Secchi': 'blue', 'Transparency Tube': 'red'}
 
-    grouped = transparency_df.groupby(['Site ID', 'Transparency Type'])
-    for (site, param), values in grouped:
-        pos = list(transparency_df['Site ID'].unique()).index(site)
-        shift = -0.2 if param == 'Secchi' else 0.2
-        x_val = pos + shift
-        values = values['Transparency (m)'].dropna()
-        q1 = values.quantile(0.25)
-        q3 = values.quantile(0.75)
-        iqr = q3 - q1
-        lower = q1 - 1.5 * iqr
-        upper = q3 + 1.5 * iqr
-        outliers = values[(values < lower) | (values > upper)]
-        ax.scatter(
-            [x_val] * len(outliers),
-            outliers,
-            color=palette[param],
-            alpha=0.7,
-            s=30,
-            edgecolors='k',
-            linewidths=0.5
-        )
+    for t in ['Secchi', 'Transparency Tube']:
+        data_t = [trans_df[(trans_df['Site ID'].eq(s)) & (trans_df['Type'].eq(t))]['Value']
+                  .dropna().values for s in site_order]
+        ax.boxplot(data_t,
+                   positions=pos + type2shift[t],
+                   widths=0.28, patch_artist=False, whis=1.5,
+                   medianprops=dict(color='black', linewidth=1.5),
+                   whiskerprops=dict(color=type2color[t], linewidth=1.2),
+                   capprops=dict(color=type2color[t], linewidth=1.2),
+                   boxprops=dict(color=type2color[t], linewidth=1.5),
+                   flierprops=dict(marker='o', markersize=0))  # fliers we draw manually
 
-    ax.set_ylabel('Transparency (meters)')
-    ax.set_ylim(0, 0.7)
-    ax.set_title("Figure 10. Transparency by Site")
-    ax.legend(title="Method", loc='center left', bbox_to_anchor=(1.0, 0.5))
-    fig10.tight_layout()
-    save_figure(fig10, "Figure10_Transparency_Boxplot.png")
+        for i, s in enumerate(site_order):
+            vals = trans_df[(trans_df['Site ID'].eq(s)) & (trans_df['Type'].eq(t))]['Value'].dropna().values
+            if len(vals) == 0:
+                continue
+            q1, q3 = np.percentile(vals, [25, 75])
+            iqr = q3 - q1
+            lo, hi = q1 - 1.5*iqr, q3 + 1.5*iqr
+            outliers = vals[(vals < lo) | (vals > hi)]
+            x_all = np.full_like(vals, pos[i] + type2shift[t], dtype=float)
+            x_all = x_all + np.random.uniform(-0.02, 0.02, size=len(vals))
+            ax.scatter(x_all, vals, s=28, color=type2color[t], alpha=0.85,
+                       edgecolors='k', linewidths=0.4)
+            if len(outliers):
+                x_out = np.full_like(outliers, pos[i] + type2shift[t], dtype=float)
+                ax.scatter(x_out, outliers, s=32, color=type2color[t],
+                           alpha=0.95, edgecolors='k', linewidths=0.5)
 
-    # Figure 11: Total Depth
+    style_axes(ax, 'Site ID', 'Transparency (meters)', site_order)
+    ax.set_ylim(0, 0.62)
+    handles = [plt.Line2D([0], [0], color='blue', lw=2, label='Secchi Disk'),
+               plt.Line2D([0], [0], color='red',  lw=2, label='Transparency Tube')]
+    ax.legend(handles=handles, loc='center left', bbox_to_anchor=(1.0, 0.5))
+    save_figure(fig10, os.path.join(output_dir, "Figure10_Transparency_Boxplot.png"))
+
+    # ================== Figure 11: Total Depth (boxplot exact style) ==================
     fig11, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=df, x='Site ID', y='Total Depth', color='white', fliersize=4, ax=ax)
-    ax.set_ylabel('Total Depth (m)')
-    save_figure(fig11, "Figure11_TotalDepth_Boxplot.png")
+    ax.boxplot(series_by_site(df, site_order, 'Total Depth'),
+               patch_artist=False, whis=1.5,
+               medianprops=dict(color='black', linewidth=1.5),
+               whiskerprops=dict(color='black', linewidth=1.2),
+               capprops=dict(color='black', linewidth=1.2),
+               boxprops=dict(color='black', linewidth=1.5),
+               flierprops=dict(marker='o', markersize=4,
+                               markerfacecolor='black', markeredgecolor='black'))
+    style_axes(ax, 'Site ID', 'Total Depth (m)', site_order)
+    save_figure(fig11, os.path.join(output_dir, "Figure11_TotalDepth_Boxplot.png"))
 
-    # Monthly Climate
-    months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-    precipitation = [2.2, 3.2, 3.9, 4.3, 5.3, 4.1, 2.6, 2.8, 3.4, 4.6, 3.3, 3.0]
-    temperature = [7.2, 9.5, 13.8, 18.2, 23.3, 27.8, 29.7, 29.4, 25.1, 18.9, 12.4, 8.4]
-    fig_climate, ax1 = plt.subplots(figsize=(10, 6))
-    ax1.set_xlabel('Month')
-    ax1.set_ylabel('Temperature (°C)', color='red')
-    ax1.plot(months, temperature, color='red', linewidth=3)
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('Precipitation (inches)', color='blue')
-    ax2.bar(months, precipitation, color='blue', alpha=0.7)
-    fig_climate.tight_layout()
-    save_figure(fig_climate, "Figure_MonthlyClimate.png")
+    # ================== Monthly Climate (from Excel) ==================
+    monthly_climate = build_monthly_climate_from_df(df)
+    if monthly_climate is None:
+        st.warning("⚠️ نتوانستم داده‌های اقلیمی ماهانه را از فایل بسازم. "
+                   "لطفاً ستون‌های «Sample Date»، «Air Temperature (° C)» و/یا «Rainfall Accumulation» را بررسی کن.")
+        fig_climate = None
+    else:
+        month_labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+        monthly_climate['Month'] = monthly_climate['MonthNum'].map(dict(enumerate(month_labels, start=1)))
 
-    # --- Table 6 Summary Statistics ---
+        fig_climate, ax1 = plt.subplots(figsize=(10, 6))
+        ax1.set_xlabel('Month')
+        have_temp = 'TempMeanC' in monthly_climate and monthly_climate['TempMeanC'].notna().any()
+        have_ppt  = 'Precip'    in monthly_climate and monthly_climate['Precip'].notna().any()
+
+        if have_temp:
+            ax1.set_ylabel('Temperature (°C)', color='red')
+            ax1.plot(monthly_climate['Month'], monthly_climate['TempMeanC'], color='red', linewidth=3)
+            ax1.tick_params(axis='y', labelcolor='red')
+        else:
+            ax1.set_ylabel('Temperature (°C)')
+
+        ax2 = ax1.twinx()
+        if have_ppt:
+            ax2.set_ylabel('Precipitation', color='blue')
+            ax2.bar(monthly_climate['Month'], monthly_climate['Precip'], alpha=0.7, color='blue')
+            ax2.tick_params(axis='y', labelcolor='blue')
+        else:
+            ax2.set_ylabel('Precipitation')
+
+        fig_climate.tight_layout()
+        save_figure(fig_climate, os.path.join(output_dir, "Figure_MonthlyClimate.png"))
+
+    # ================== Table 6: Summary Statistics ==================
     st.markdown("## 📋 Table 6. Summary Statistics by Site and Parameter")
 
     site_event_counts = df.groupby('Site ID').size()
     valid_sites = site_event_counts[site_event_counts >= 10].index
-    df_valid = df[df['Site ID'].isin(valid_sites)]
+    df_valid = df[df['Site ID'].isin(valid_sites)].copy()
 
     param_map = {
         'Air Temperature (°C)': 'Air Temp Rounded',
@@ -153,69 +325,65 @@ if uploaded_file:
         'Total Depth (m)': 'Total Depth',
     }
 
-    summary_rows = []
-    for label, column in param_map.items():
+    rows = []
+    for label, col in param_map.items():
         for stat in ['Mean', 'Std Dev', 'Range']:
-            row = {'Parameter': label if stat == 'Mean' else '', 'Statistic': stat}
-            for site in valid_sites:
-                values = df_valid[df_valid['Site ID'] == site][column].dropna()
-                if len(values) >= 10:
+            rec = {'Parameter': label if stat == 'Mean' else '', 'Statistic': stat}
+            for s in valid_sites:
+                vals = df_valid.loc[df_valid['Site ID'].eq(s), col].dropna()
+                if len(vals) >= 10:
                     if stat == 'Mean':
-                        val = round(values.mean(), 2)
+                        val = round(vals.mean(), 2)
                     elif stat == 'Std Dev':
-                        val = round(values.std(), 2)
-                    elif stat == 'Range':
-                        val = round(values.max() - values.min(), 2)
+                        val = round(vals.std(ddof=1), 2)
+                    else:
+                        val = round(vals.max() - vals.min(), 2)
                 else:
                     val = 'ND'
-                row[site] = val
-            summary_rows.append(row)
+                rec[str(s)] = val
+            rows.append(rec)
+    summary_df = pd.DataFrame(rows)
 
-    summary_df = pd.DataFrame(summary_rows)
-
-    # Save to CSV
     table6_path = os.path.join(output_dir, "Table6_Summary.csv")
     summary_df.to_csv(table6_path, index=False)
 
-    # Format like Word: only show parameter name once per group
-    def style_word_format(df):
-        styled = df.copy()
-        styled['Parameter'] = styled['Parameter'].mask(styled['Parameter'] == "").ffill().mask(styled['Statistic'] != "Mean", "")
-        return styled
+    # Display grouped like Word
+    def word_like(df_):
+        d = df_.copy()
+        d['Parameter'] = d['Parameter'].mask(d['Parameter'] == "").ffill().mask(d['Statistic'] != "Mean", "")
+        return d
+    st.dataframe(word_like(summary_df), use_container_width=True)
 
-    styled_df = style_word_format(summary_df).style\
-        .set_table_styles([{'selector': 'th', 'props': [('text-align', 'center'), ('font-weight', 'bold')]}])\
-        .set_properties(**{'text-align': 'center', 'border': '1px solid gray', 'padding': '6px'})\
-        .apply(lambda x: ['background-color: #f5f5fa' if x['Statistic'] == 'Mean' else '' for _ in x], axis=1)
-
-    st.dataframe(styled_df, use_container_width=True)
-
-    # --- ZIP download button ---
+    # ================== ZIP download ==================
     st.markdown("## 📦 Download All Results (Figures + Table 6)")
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zipf:
-        for file in os.listdir(output_dir):
-            filepath = os.path.join(output_dir, file)
-            zipf.write(filepath, arcname=file)
+        for f in os.listdir(output_dir):
+            zipf.write(os.path.join(output_dir, f), arcname=f)
     zip_buffer.seek(0)
-    st.download_button("📥 Download ZIP", data=zip_buffer, file_name="WSR_All_Results.zip", mime="application/zip")
+    st.download_button("📥 Download ZIP", data=zip_buffer,
+                       file_name="WSR_All_Results.zip", mime="application/zip")
     st.success("✅ All outputs successfully generated.")
 
-    # --- Show charts
+    # ================== Show charts in app (then close figs) ==================
     st.subheader("Figure 6. Water Temperature Over Time by Site")
-    st.pyplot(fig6)
+    st.pyplot(fig6); plt.close(fig6)
 
     st.subheader("Figure 7. TDS by Site")
-    st.pyplot(fig7)
+    st.pyplot(fig7); plt.close(fig7)
 
     st.subheader("Figure 8. Dissolved Oxygen by Site")
-    st.pyplot(fig8)
+    st.pyplot(fig8); plt.close(fig8)
+
+    st.subheader("Figure 9. pH by Site")
+    st.pyplot(fig_ph); plt.close(fig_ph)
 
     st.subheader("Figure 10. Transparency by Site")
-    st.pyplot(fig10)
+    st.pyplot(fig10); plt.close(fig10)
 
     st.subheader("Figure 11. Total Depth by Site")
-    st.pyplot(fig11)
+    st.pyplot(fig11); plt.close(fig11)
 
-    st.subheader("Figure #: Monthly Avg Precipitation and Temperature")
-    st.pyplot(fig_climate)
+    if 'fig_climate' in locals() and fig_climate is not None:
+        st.subheader("Figure #: Monthly Avg Temperature and Total Precipitation")
+        st.pyplot(fig_climate); plt.close(fig_climate)
