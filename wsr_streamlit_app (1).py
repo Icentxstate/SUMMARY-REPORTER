@@ -240,7 +240,7 @@ if uploaded_file:
         )
 
     style_axes(ax, 'Site ID', 'Transparency (meters)', site_order)
-    ax.set_ylim(0, 1.7)
+    ax.set_ylim(0, 1.4)
     handles = [plt.Line2D([0], [0], color='blue', lw=2, label='Secchi Disk'),
                plt.Line2D([0], [0], color='red',  lw=2, label='Transparency Tube')]
     ax.legend(handles=handles, loc='center left', bbox_to_anchor=(1.0, 0.5))
