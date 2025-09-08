@@ -113,7 +113,7 @@ if uploaded_file:
     df['Air Temp Rounded']   = to_num(get_col(df, 'Air Temperature (° C)', 'Air Temperature (°C)', 'Air Temp Rounded'))
     df['Water Temp Rounded'] = to_num(get_col(df, 'Water Temp Rounded', 'Water Temperature (° C)', 'Water Temperature (°C)'))
 
-    cond_col = get_col(df, 'Conductivity (µS/cm)', 'Conductivity (uS/cm)', 'Conductivity (?S/cm)', 'Conductivity')
+    cond_col = get_col(df, 'Conductivity (µS/cm)', 'Conductivity (uS/cm)', 'Conductivity (?S/cm)', 'Conductivity', 'Conductivity (μS/cm)')
     df['Conductivity'] = to_num(cond_col)
 
     tds_existing = get_col(df, 'TDS (mg/L)', 'Total Dissolved Solids (mg/L)')
