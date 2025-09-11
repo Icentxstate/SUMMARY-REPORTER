@@ -333,29 +333,46 @@ if uploaded_file:
                 for s in site_order:
                     vals = df.loc[df['Site ID'].eq(s), col].dropna().values
                     if len(vals) == 0:
-                        row[s] = "ND"
+                        # نگه‌داری به صورت NaN تا بعداً با فرمت دو رقم اعشار و ND کنترل شود
+                        row[s] = np.nan
                     else:
                         if stat == 'Mean':
-                            row[s] = round(float(np.mean(vals)), 1)
+                            row[s] = float(np.mean(vals))
                         elif stat == 'Std Dev':
-                            row[s] = round(float(np.std(vals, ddof=1)), 1) if len(vals) > 1 else 0.0
+                            row[s] = float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0
                         elif stat == 'Range':
-                            row[s] = round(float(np.max(vals) - np.min(vals)), 1) if len(vals) > 0 else 0.0
+                            row[s] = float(np.max(vals) - np.min(vals))
                 summary_rows.append(row)
 
     summary_df = pd.DataFrame(summary_rows)
 
-    # نمایش در اپ
+    # ستون‌های عددی (Site IDها) را پیدا کن
+    value_cols = [c for c in summary_df.columns if c not in ['Parameter', 'Statistic']]
+
+    # تبدیل به عدد (اگر جایی رشته افتاده باشد) و گرد کردن به دو رقم اعشار
+    for c in value_cols:
+        summary_df[c] = pd.to_numeric(summary_df[c], errors='coerce')
+    summary_df[value_cols] = summary_df[value_cols].round(2)
+
+    # نمایش در اپ با دو رقم اعشار و ND برای مقادیر خالی
+    formatter = {c: "{:.2f}" for c in value_cols}
     st.subheader("📑 Summary Statistics (Table 6 style)")
     if not summary_df.empty:
-        st.dataframe(summary_df)
+        st.dataframe(summary_df.style.format(formatter, na_rep="ND"))
     else:
         st.info("No numeric data found to summarize for Table 6.")
 
-    # ذخیره در Excel
+    # ذخیره در Excel با دو رقم اعشار
     table6_path = os.path.join(output_dir, "Table6_Summary.xlsx")
     if not summary_df.empty:
-        summary_df.to_excel(table6_path, index=False)
+        # گزینه 1) خروجی با ND در سلول‌های خالی:
+        save_df = summary_df.copy()
+        save_df[value_cols] = save_df[value_cols].applymap(lambda v: v if pd.notna(v) else "ND")
+        save_df.to_excel(table6_path, index=False)
+
+        # اگر ترجیح می‌دهی در Excel سلول‌های خالی، خالی بمانند (بدون ND)،
+        # به‌جای بلوک بالا از خط زیر استفاده کن:
+        # summary_df.to_excel(table6_path, index=False)
 
     # ================== ZIP download ==================
     st.markdown("## 📦 Download All Results (Figures + Table 6)")
