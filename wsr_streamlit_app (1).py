@@ -38,7 +38,7 @@ def style_axes(ax, xlabel='', ylabel='', site_order=None):
         sp.set_color('black')
     if site_order is not None:
         ax.set_xticks(range(1, len(site_order)+1))
-        ax.set_xticklabels(site_order)
+        ax.set_xticklabels(site_order, rotation=0)
 
 def series_by_site(df, site_order, ycol):
     return [df.loc[df['Site ID'].eq(s), ycol].dropna().values for s in site_order]
@@ -72,14 +72,14 @@ def build_monthly_climate_from_df(df):
     if ppt_name:
         tmp['__ppt__'] = to_num(df[ppt_name])
 
-    if ('__temp__' not in tmp and '__ppt__' not in tmp) or \
-       (tmp.get('__temp__', pd.Series(dtype=float)).notna().sum() == 0 and
-        tmp.get('__ppt__',  pd.Series(dtype=float)).notna().sum()  == 0):
+    if (('__temp__' not in tmp.columns) and ('__ppt__' not in tmp.columns)) or \
+       (('__temp__' in tmp.columns and tmp['__temp__'].notna().sum() == 0) and
+        ('__ppt__'  in tmp.columns and tmp['__ppt__'].notna().sum()  == 0)):
         return None
 
     monthly = pd.DataFrame({'MonthNum': range(1, 13)})
 
-    if '__temp__' in tmp and tmp['__temp__'].notna().any():
+    if '__temp__' in tmp.columns and tmp['__temp__'].notna().any():
         t_month = (tmp.dropna(subset=['__temp__'])
                      .set_index('__date__')['__temp__']
                      .resample('M').mean())
@@ -89,7 +89,7 @@ def build_monthly_climate_from_df(df):
                            .rename(columns={'__temp__': 'TempMeanC'}))
         monthly = monthly.merge(t_month, on='MonthNum', how='left')
 
-    if '__ppt__' in tmp and tmp['__ppt__'].notna().any():
+    if '__ppt__' in tmp.columns and tmp['__ppt__'].notna().any():
         p_month = (tmp.dropna(subset=['__ppt__'])
                      .set_index('__date__')['__ppt__']
                      .resample('M').sum())
@@ -120,6 +120,7 @@ if uploaded_file:
     if tds_existing.notna().sum() > 0:
         df['TDS (mg/L)'] = to_num(tds_existing)
     else:
+        # Standard conversion if TDS missing
         df['TDS (mg/L)'] = df['Conductivity'] * 0.65
 
     df['DO_avg'] = to_num(get_col(df, 'Dissolved Oxygen (mg/L) Average', 'DO_avg', 'Dissolved Oxygen (mg/L)'))
@@ -129,6 +130,14 @@ if uploaded_file:
     df['Transparency Tube'] = to_num(get_col(df, 'Transparency Tube (meters)', 'Transparency Tube (m)'))
     df['Total Depth']       = to_num(get_col(df, 'Total Depth (meters)', 'Total Depth (m)', 'Depth (m)'))
 
+    # E. coli (optional if present)
+    ecoli_col = get_col(
+        df,
+        'E. coli (MPN/100 mL)', 'E. coli (#/100 mL)', 'E. coli',
+        'E.coli (MPN/100 mL)', 'E Coli (MPN/100 mL)'
+    )
+    df['E_coli'] = to_num(ecoli_col)
+
     # Drop rows without Site ID
     df = df[df['Site ID'].notna() & df['Site ID'].ne('')].copy()
 
@@ -136,11 +145,13 @@ if uploaded_file:
     output_dir = "wsr_figures"
     ensure_dir(output_dir)
 
-    # ---------- WQS Constants ----------
+    # ---------- Water Quality Standards (UPDATED) ----------
+    # Temperature (°C), TDS (mg/L), Dissolved Oxygen (mg/L), pH (SU), E. coli (#/100 mL)
     WQS_TEMP = 32.2
-    WQS_TDS  = 500
+    WQS_TDS  = 500.0
     WQS_DO   = 5.0
     WQS_pH_MIN, WQS_pH_MAX = 6.5, 9.0
+    WQS_ECOLI = 126.0
 
     # Site order
     site_order = list(pd.unique(df['Site ID']))
@@ -153,7 +164,7 @@ if uploaded_file:
             dsi['Sample Date'],
             dsi['Water Temp Rounded'],
             s=40,
-            marker='o',   # همه دایره
+            marker='o',   # unified circles
             label=s,
             alpha=0.9
         )
@@ -177,10 +188,10 @@ if uploaded_file:
                                markerfacecolor='black', markeredgecolor='black'))
     style_axes(ax, 'Site ID', 'TDS (mg/L)', site_order)
     ax.axhline(WQS_TDS, linestyle='--', color='red')
-    ax.text(0.5, WQS_TDS + 10, 'WQS', color='red')
+    ax.text(1, WQS_TDS + 10, 'WQS', color='red', va='bottom')
     save_figure(fig7, os.path.join(output_dir, "Figure7_TDS_Boxplot.png"))
 
-    # ================== Figure 8: DO ==================
+    # ================== Figure 8: Dissolved Oxygen ==================
     fig8, ax = plt.subplots(figsize=(10, 6))
     ax.boxplot(series_by_site(df, site_order, 'DO_avg'),
                patch_artist=False, whis=1.5,
@@ -192,7 +203,7 @@ if uploaded_file:
                                markerfacecolor='black', markeredgecolor='black'))
     style_axes(ax, 'Site ID', 'Dissolved Oxygen (mg/L)', site_order)
     ax.axhline(WQS_DO, linestyle='--', color='red')
-    ax.text(0.5, WQS_DO + 0.1, 'WQS', color='red')
+    ax.text(1, WQS_DO + 0.1, 'WQS', color='red', va='bottom')
     save_figure(fig8, os.path.join(output_dir, "Figure8_DO_Boxplot.png"))
 
     # ================== Figure 9: pH ==================
@@ -208,8 +219,8 @@ if uploaded_file:
     style_axes(ax, 'Site ID', 'pH (standard units)', site_order)
     ax.axhline(WQS_pH_MAX, linestyle='--', color='red')
     ax.axhline(WQS_pH_MIN, linestyle='--', color='red')
-    ax.text(0.5, WQS_pH_MAX + 0.03, 'WQS Max', color='red')
-    ax.text(0.5, WQS_pH_MIN + 0.03, 'WQS Min', color='red')
+    ax.text(1, WQS_pH_MAX + 0.03, 'WQS Max', color='red', va='bottom')
+    ax.text(1, WQS_pH_MIN + 0.03, 'WQS Min', color='red', va='bottom')
     save_figure(fig_ph, os.path.join(output_dir, "Figure9_pH_Boxplot.png"))
 
     # ================== Figure 10: Transparency ==================
@@ -259,6 +270,24 @@ if uploaded_file:
     style_axes(ax, 'Site ID', 'Total Depth (m)', site_order)
     save_figure(fig11, os.path.join(output_dir, "Figure11_TotalDepth_Boxplot.png"))
 
+    # ================== (NEW) Figure 12: E. coli ==================
+    if df['E_coli'].notna().any():
+        fig12, ax = plt.subplots(figsize=(10, 6))
+        ax.boxplot(series_by_site(df, site_order, 'E_coli'),
+                   patch_artist=False, whis=1.5,
+                   medianprops=dict(color='black'),
+                   whiskerprops=dict(color='black'),
+                   capprops=dict(color='black'),
+                   boxprops=dict(color='black'),
+                   flierprops=dict(marker='o', markersize=4,
+                                   markerfacecolor='black', markeredgecolor='black'))
+        style_axes(ax, 'Site ID', 'E. coli (#/100 mL)', site_order)
+        ax.axhline(WQS_ECOLI, linestyle='--', color='red')
+        ax.text(1, WQS_ECOLI + 5, 'WQS', color='red', va='bottom')
+        save_figure(fig12, os.path.join(output_dir, "Figure12_Ecoli_Boxplot.png"))
+    else:
+        fig12 = None
+
     # ================== Monthly Climate (from Excel) ==================
     monthly_climate = build_monthly_climate_from_df(df)
     if monthly_climate is not None:
@@ -267,12 +296,12 @@ if uploaded_file:
 
         fig_climate, ax1 = plt.subplots(figsize=(10, 6))
         ax1.set_xlabel('Month')
-        if 'TempMeanC' in monthly_climate:
+        if 'TempMeanC' in monthly_climate.columns:
             ax1.set_ylabel('Temperature (°C)', color='red')
             ax1.plot(monthly_climate['Month'], monthly_climate['TempMeanC'], color='red', linewidth=3)
             ax1.tick_params(axis='y', labelcolor='red')
         ax2 = ax1.twinx()
-        if 'Precip' in monthly_climate:
+        if 'Precip' in monthly_climate.columns:
             ax2.set_ylabel('Precipitation', color='blue')
             ax2.bar(monthly_climate['Month'], monthly_climate['Precip'], alpha=0.7, color='blue')
             ax2.tick_params(axis='y', labelcolor='blue')
@@ -311,6 +340,10 @@ if uploaded_file:
     st.subheader("Figure 11. Total Depth by Site")
     st.pyplot(fig11); plt.close(fig11)
 
-    if fig_climate is not None:
+    if fig12 is not None:
+        st.subheader("Figure 12. E. coli by Site")
+        st.pyplot(fig12); plt.close(fig12)
+
+    if 'fig_climate' in locals() and fig_climate is not None:
         st.subheader("Figure #: Monthly Avg Temperature and Total Precipitation")
         st.pyplot(fig_climate); plt.close(fig_climate)
