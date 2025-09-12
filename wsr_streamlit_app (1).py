@@ -224,7 +224,7 @@ if uploaded_file:
     ax.text(1, WQS_pH_MIN + 0.03, 'WQS Min', color='red', va='bottom')
     save_figure(fig_ph, os.path.join(output_dir, "Figure9_pH_Boxplot.png"))
 
-    # ================== Figure 10: Transparency ==================
+    # ================== Figure 10: Transparency (Secchi vs Tube, side-by-side boxplots) ==================
     trans_df = df.melt(id_vars=['Site ID'],
                        value_vars=['Secchi', 'Transparency Tube'],
                        var_name='Type', value_name='Value').dropna()
@@ -257,6 +257,24 @@ if uploaded_file:
                plt.Line2D([0], [0], color='red',  lw=2, label='Transparency Tube')]
     ax.legend(handles=handles, loc='center left', bbox_to_anchor=(1.0, 0.5))
     save_figure(fig10, os.path.join(output_dir, "Figure10_Transparency_Boxplot.png"))
+
+    # ================== Figure 10B: Transparency Tube ONLY (by Site) ==================
+    fig10b = None
+    if 'Transparency Tube' in df.columns and df['Transparency Tube'].notna().any():
+        fig10b, ax = plt.subplots(figsize=(10, 6))
+        ax.boxplot(
+            series_by_site(df, site_order, 'Transparency Tube'),
+            patch_artist=False, whis=1.5,
+            medianprops=dict(color='black'),
+            whiskerprops=dict(color='black'),
+            capprops=dict(color='black'),
+            boxprops=dict(color='black'),
+            flierprops=dict(marker='o', markersize=4,
+                            markerfacecolor='black', markeredgecolor='black')
+        )
+        style_axes(ax, 'Site ID', 'Transparency Tube (m)', site_order)
+        ax.set_ylim(0, 1.4)  # align with combined transparency plot
+        save_figure(fig10b, os.path.join(output_dir, "Figure10B_TransparencyTube_Boxplot.png"))
 
     # ================== Figure 11: Total Depth ==================
     fig11, ax = plt.subplots(figsize=(10, 6))
@@ -293,7 +311,7 @@ if uploaded_file:
     monthly_climate = build_monthly_climate_from_df(df)
     if monthly_climate is not None:
         month_labels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-        monthly_climate['Month'] = monthly_climate['MonthNum'].map(dict(enumerate(month_labels, start=1)))
+        monthly_climate['Month'] = monthly_climate['MonthNum'].map({i+1: m for i, m in enumerate(month_labels)})
 
         fig_climate, ax1 = plt.subplots(figsize=(10, 6))
         ax1.set_xlabel('Month')
@@ -333,7 +351,6 @@ if uploaded_file:
                 for s in site_order:
                     vals = df.loc[df['Site ID'].eq(s), col].dropna().values
                     if len(vals) == 0:
-                        # نگه‌داری به صورت NaN تا بعداً با فرمت دو رقم اعشار و ND کنترل شود
                         row[s] = np.nan
                     else:
                         if stat == 'Mean':
@@ -349,7 +366,7 @@ if uploaded_file:
     # ستون‌های عددی (Site IDها) را پیدا کن
     value_cols = [c for c in summary_df.columns if c not in ['Parameter', 'Statistic']]
 
-    # تبدیل به عدد (اگر جایی رشته افتاده باشد) و گرد کردن به دو رقم اعشار
+    # تبدیل به عدد و گرد کردن به دو رقم اعشار
     for c in value_cols:
         summary_df[c] = pd.to_numeric(summary_df[c], errors='coerce')
     summary_df[value_cols] = summary_df[value_cols].round(2)
@@ -365,20 +382,14 @@ if uploaded_file:
     # ذخیره در Excel با دو رقم اعشار
     table6_path = os.path.join(output_dir, "Table6_Summary.xlsx")
     if not summary_df.empty:
-        # گزینه 1) خروجی با ND در سلول‌های خالی:
         save_df = summary_df.copy()
         save_df[value_cols] = save_df[value_cols].applymap(lambda v: v if pd.notna(v) else "ND")
         save_df.to_excel(table6_path, index=False)
-
-        # اگر ترجیح می‌دهی در Excel سلول‌های خالی، خالی بمانند (بدون ND)،
-        # به‌جای بلوک بالا از خط زیر استفاده کن:
-        # summary_df.to_excel(table6_path, index=False)
 
     # ================== ZIP download ==================
     st.markdown("## 📦 Download All Results (Figures + Table 6)")
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zipf:
-        # add figures
         for f in os.listdir(output_dir):
             zipf.write(os.path.join(output_dir, f), arcname=f)
     zip_buffer.seek(0)
@@ -398,8 +409,12 @@ if uploaded_file:
     st.subheader("Figure 9. pH by Site")
     st.pyplot(fig_ph); plt.close(fig_ph)
 
-    st.subheader("Figure 10. Transparency by Site")
+    st.subheader("Figure 10. Transparency by Site (Secchi vs Tube)")
     st.pyplot(fig10); plt.close(fig10)
+
+    if 'fig10b' in locals() and fig10b is not None:
+        st.subheader("Figure 10B. Transparency Tube by Site")
+        st.pyplot(fig10b); plt.close(fig10b)
 
     st.subheader("Figure 11. Total Depth by Site")
     st.pyplot(fig11); plt.close(fig11)
@@ -408,6 +423,6 @@ if uploaded_file:
         st.subheader("Figure 12. E. coli by Site")
         st.pyplot(fig12); plt.close(fig12)
 
-    if fig_climate is not None:
+    if 'fig_climate' in locals() and fig_climate is not None:
         st.subheader("Figure #: Monthly Avg Temperature and Total Precipitation")
         st.pyplot(fig_climate); plt.close(fig_climate)
