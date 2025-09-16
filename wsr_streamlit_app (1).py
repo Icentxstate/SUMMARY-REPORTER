@@ -13,9 +13,49 @@ st.title("📊 Watershed Summary Report Graph Generator (Exact Style)")
 
 uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx")
 
+# ================== Manual WQS inputs (per run) ==================
+st.sidebar.header("Water Quality Standards (Manual Input)")
+segment_label = st.sidebar.text_input(
+    "Segment label (for your reference)",
+    value="1209 (Navasota River below Limestone Lake)"
+)
+
+WQS_TEMP = st.sidebar.number_input(
+    "Temperature threshold (°C)",
+    value=33.9, step=0.1, format="%.1f"
+)
+WQS_TDS = st.sidebar.number_input(
+    "Total Dissolved Solids (mg/L)",
+    value=600.0, step=10.0, format="%.0f"
+)
+WQS_DO = st.sidebar.number_input(
+    "Dissolved Oxygen (mg/L) — minimum",
+    value=5.0, step=0.1, format="%.1f"
+)
+WQS_pH_MIN = st.sidebar.number_input(
+    "pH — minimum (s.u.)",
+    value=6.5, step=0.1, format="%.1f"
+)
+WQS_pH_MAX = st.sidebar.number_input(
+    "pH — maximum (s.u.)",
+    value=9.0, step=0.1, format="%.1f"
+)
+WQS_ECOLI = st.sidebar.number_input(
+    "E. coli Bacteria (#/100 mL)",
+    value=126.0, step=1.0, format="%.0f"
+)
+
+st.sidebar.caption(
+    f"Using WQS for: **{segment_label}**\n\n"
+    f"- Temp ≤ {WQS_TEMP:.1f} °C\n"
+    f"- TDS ≤ {WQS_TDS:.0f} mg/L\n"
+    f"- DO ≥ {WQS_DO:.1f} mg/L\n"
+    f"- pH {WQS_pH_MIN:.1f}–{WQS_pH_MAX:.1f}\n"
+    f"- E. coli ≤ {WQS_ECOLI:.0f} #/100 mL"
+)
+
 # ================== Helpers ==================
 def get_col(df, *candidates):
-    """Return first matching column; else a NaN Series with same index."""
     for c in candidates:
         if c in df.columns:
             return df[c]
@@ -50,12 +90,10 @@ def find_first_name(df, names):
             return n
     return None
 
-# ===== Monthly Climate builder (from Excel) =====
 def build_monthly_climate_from_df(df):
     date_col = find_first_name(df, ['Sample Date', 'Date', 'SampleDate', 'Datetime'])
     if date_col is None:
         return None
-
     temp_name = find_first_name(df, [
         'Air Temperature (° C)', 'Air Temperature (°C)',
         'Water Temperature (° C)', 'Water Temperature (°C)'
@@ -63,23 +101,18 @@ def build_monthly_climate_from_df(df):
     ppt_name  = find_first_name(df, [
         'Rainfall Accumulation', 'Precipitation', 'Rain', 'Rain (in)'
     ])
-
     tmp = df[[date_col]].copy()
     tmp['__date__'] = pd.to_datetime(tmp[date_col], errors='coerce')
     tmp = tmp.dropna(subset=['__date__']).sort_values('__date__')
-
     if temp_name:
         tmp['__temp__'] = to_num(df[temp_name])
     if ppt_name:
         tmp['__ppt__'] = to_num(df[ppt_name])
-
     has_temp = ('__temp__' in tmp.columns and tmp['__temp__'].notna().any())
     has_ppt  = ('__ppt__'  in tmp.columns and tmp['__ppt__'].notna().any())
     if not (has_temp or has_ppt):
         return None
-
     monthly = pd.DataFrame({'MonthNum': range(1, 13)})
-
     if has_temp:
         t_month = (tmp.dropna(subset=['__temp__'])
                      .set_index('__date__')['__temp__']
@@ -89,7 +122,6 @@ def build_monthly_climate_from_df(df):
                            .groupby('MonthNum', as_index=False)['__temp__'].mean()
                            .rename(columns={'__temp__': 'TempMeanC'}))
         monthly = monthly.merge(t_month, on='MonthNum', how='left')
-
     if has_ppt:
         p_month = (tmp.dropna(subset=['__ppt__'])
                      .set_index('__date__')['__ppt__']
@@ -99,7 +131,6 @@ def build_monthly_climate_from_df(df):
                            .groupby('MonthNum', as_index=False)['__ppt__'].sum()
                            .rename(columns={'__ppt__': 'Precip'}))
         monthly = monthly.merge(p_month, on='MonthNum', how='left')
-
     return monthly.sort_values('MonthNum')
 
 # ================== Main ==================
