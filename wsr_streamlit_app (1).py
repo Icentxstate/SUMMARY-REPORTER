@@ -17,7 +17,7 @@ uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx
 st.sidebar.header("Water Quality Standards (Manual Input)")
 segment_label = st.sidebar.text_input(
     "Segment label (for your reference)",
-    value="1209 (Navasota River below Limestone Lake)"
+    
 )
 
 WQS_TEMP = st.sidebar.number_input(
