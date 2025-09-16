@@ -82,7 +82,7 @@ def style_axes(ax, xlabel='', ylabel='', site_order=None):
         ax.set_xticklabels(site_order, rotation=0)
 
 def series_by_site(df, site_order, ycol):
-    return [df.loc[df['Site ID'].eq(s), ycol].dropna().values for s in site_order]
+    return [df.loc(df['Site ID'].eq(s), ycol).dropna().values for s in site_order]
 
 def find_first_name(df, names):
     for n in names:
@@ -136,7 +136,10 @@ def build_monthly_climate_from_df(df):
 # ================== Main ==================
 if uploaded_file:
     # ---------- Read ----------
-    df = pd.read_excel(uploaded_file)
+    try:
+        df = pd.read_excel(uploaded_file, engine="openpyxl")
+    except Exception:
+        df = pd.read_excel(uploaded_file)  # fallback
 
     # ---------- Prepare columns ----------
     df['Sample Date'] = pd.to_datetime(get_col(df, 'Sample Date', 'Date', 'SampleDate'), errors='coerce')
@@ -177,15 +180,7 @@ if uploaded_file:
     output_dir = "wsr_figures"
     ensure_dir(output_dir)
 
-    # ---------- Water Quality Standards (UPDATED) ----------
-    # Temperature (°C), TDS (mg/L), Dissolved Oxygen (mg/L), pH (SU), E. coli (#/100 mL)
-    WQS_TEMP = 32.2
-    WQS_TDS  = 500.0
-    WQS_DO   = 5.0
-    WQS_pH_MIN, WQS_pH_MAX = 6.5, 9.0
-    WQS_ECOLI = 126.0
-
-    # Site order (keep file order)
+    # ---------- Site order (keep file order) ----------
     site_order = list(pd.unique(df['Site ID']))
 
     # ================== Figure 6: Water Temperature (scatter, all circles) ==================
@@ -394,19 +389,15 @@ if uploaded_file:
 
     summary_df = pd.DataFrame(summary_rows)
 
-    # ستون‌های عددی (Site IDها) را پیدا کن
+    # عددی کردن و گرد کردن
     value_cols = [c for c in summary_df.columns if c not in ['Parameter', 'Statistic']]
-
-    # تبدیل به عدد و گرد کردن به دو رقم اعشار
     for c in value_cols:
         summary_df[c] = pd.to_numeric(summary_df[c], errors='coerce')
     summary_df[value_cols] = summary_df[value_cols].round(2)
 
-    # نمایش در اپ با دو رقم اعشار و ND برای مقادیر خالی
-    formatter = {c: "{:.2f}" for c in value_cols}
     st.subheader("📑 Summary Statistics (Table 6 style)")
     if not summary_df.empty:
-        st.dataframe(summary_df.style.format(formatter, na_rep="ND"))
+        st.dataframe(summary_df.style.format({c: "{:.2f}" for c in value_cols}, na_rep="ND"))
     else:
         st.info("No numeric data found to summarize for Table 6.")
 
