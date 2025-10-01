@@ -9,7 +9,7 @@ from io import BytesIO
 
 # ================== Streamlit Page ==================
 st.set_page_config(page_title='WSR Graph Generator', layout='wide')
-st.title("📊 Watershed Summary Report Graph Generator (Exact Style)")
+st.title(" Watershed Summary Report Graph Generator (Exact Style)")
 
 uploaded_file = st.file_uploader("Upload your Excel dataset (.xlsx)", type="xlsx")
 
