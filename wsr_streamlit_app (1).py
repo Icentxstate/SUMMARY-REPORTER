@@ -224,7 +224,7 @@ if uploaded_file:
         flierprops=dict(marker='o', markersize=4,
                         markerfacecolor='black', markeredgecolor='black')
     )
-    style_axes(ax, 'Site ID', 'TDS (mg/L)', site_order)
+    style_axes(ax, 'Site ID', 'Total Dissolved Solids' (mg/L)', site_order)
 
     # Ensure the WQS line is within visible y-range
     all_vals = np.concatenate([v for v in tds_by_site if len(v) > 0]) if any(len(v)>0 for v in tds_by_site) else np.array([])
@@ -412,7 +412,7 @@ if uploaded_file:
         fig_climate.tight_layout()
         save_figure(fig_climate, os.path.join(output_dir, "Figure_MonthlyClimate.png"))
     else:
-        st.warning("⚠️ اقلیم ماهانه پیدا نشد یا ستون‌های لازم وجود ندارد.")
+        st.warning(" اقلیم ماهانه پیدا نشد یا ستون‌های لازم وجود ندارد.")
 
     # ================== Summary Table (Table 6 style) ==================
     param_map = {
@@ -453,7 +453,7 @@ if uploaded_file:
         summary_df[c] = pd.to_numeric(summary_df[c], errors='coerce')
     summary_df[value_cols] = summary_df[value_cols].round(2)
 
-    st.subheader("📑 Summary Statistics (Table 6 style)")
+    st.subheader(" Summary Statistics (Table 6 style)")
     if not summary_df.empty:
         st.dataframe(summary_df.style.format({c: "{:.2f}" for c in value_cols}, na_rep="ND"))
     else:
@@ -466,13 +466,13 @@ if uploaded_file:
         save_df.to_excel(table6_path, index=False)
 
     # ================== ZIP download ==================
-    st.markdown("## 📦 Download All Results (Figures + Table 6)")
+    st.markdown("##  Download All Results (Figures + Table 6)")
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, 'w') as zipf:
         for f in os.listdir(output_dir):
             zipf.write(os.path.join(output_dir, f), arcname=f)
     zip_buffer.seek(0)
-    st.download_button("📥 Download ZIP", data=zip_buffer,
+    st.download_button(" Download ZIP", data=zip_buffer,
                        file_name="WSR_All_Results.zip", mime="application/zip")
 
     # ================== Show charts ==================
