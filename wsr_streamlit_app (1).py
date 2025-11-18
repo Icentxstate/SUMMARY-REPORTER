@@ -245,6 +245,32 @@ if uploaded_file:
     ax.set_title(f"{segment_label}")
     save_figure(fig7, os.path.join(output_dir, "Figure7_TDS_Boxplot.png"))
 
+    # ================== Figure 7B: Specific Conductance (µS/cm) ==================
+    fig7b, ax = plt.subplots(figsize=(10, 6))
+
+    # Boxplot  Conductivity
+    ax.boxplot(
+        series_by_site(df, site_order, 'Conductivity'),
+        patch_artist=False,
+        whis=1.5,
+        medianprops=dict(color='black'),
+        whiskerprops=dict(color='black'),
+        capprops=dict(color='black'),
+        boxprops=dict(color='black'),
+        flierprops=dict(
+            marker='o',
+            markersize=4,
+            markerfacecolor='black',
+            markeredgecolor='black'
+        )
+    )
+
+   
+    style_axes(ax, 'Site ID', 'Specific Conductance (µS/cm)', site_order)
+    ax.set_title(f"{segment_label}")
+    
+    save_figure(fig7b, os.path.join(output_dir, "Figure7B_Conductivity_Boxplot.png"))
+
     # ================== Figure 8: Dissolved Oxygen ==================
     fig8, ax = plt.subplots(figsize=(10, 6))
     ax.boxplot(series_by_site(df, site_order, 'DO_avg'),
@@ -479,3 +505,10 @@ if uploaded_file:
     if 'fig_climate' in locals() and fig_climate is not None:
         st.subheader("Figure #: Monthly Avg Temperature and Total Precipitation")
         st.pyplot(fig_climate); plt.close(fig_climate)
+
+# Conductance
+    if 'fig7b' in locals() and fig7b is not None:
+        st.subheader("Figure 7B. Specific Conductance by Site")
+        st.pyplot(fig7b); plt.close(fig7b)
+
+
