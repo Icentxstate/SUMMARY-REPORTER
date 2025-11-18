@@ -224,7 +224,7 @@ if uploaded_file:
         flierprops=dict(marker='o', markersize=4,
                         markerfacecolor='black', markeredgecolor='black')
     )
-    style_axes(ax, 'Site ID', 'Total Dissolved Solids' (mg/L)', site_order)
+    style_axes(ax, 'Site ID', 'Total Dissolved Solids (mg/L)', site_order)
 
     # Ensure the WQS line is within visible y-range
     all_vals = np.concatenate([v for v in tds_by_site if len(v) > 0]) if any(len(v)>0 for v in tds_by_site) else np.array([])
