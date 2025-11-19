@@ -198,21 +198,6 @@ if uploaded_file:
         ['Description', 'Site Description', 'Site Desc', 'Location', 'Description ']
     )
 
-    if desc_col:
-        desc_counts = df.groupby('Site ID')[desc_col].nunique()
-        multi_desc_sites = desc_counts[desc_counts > 1].index.tolist()
-
-        if len(multi_desc_sites) > 0:
-            df['Site ID'] = df.apply(
-                lambda r: f"{r['Site ID']} - {r[desc_col]}"
-                if r['Site ID'] in multi_desc_sites else r['Site ID'],
-                axis=1
-            )
-
-    # Rebuild site order after modifying Site ID
-    site_order = list(pd.unique(df['Site ID']))
-    
-
     # Temperatures
     df['Air Temp Rounded'] = to_num(
         get_col(df,
