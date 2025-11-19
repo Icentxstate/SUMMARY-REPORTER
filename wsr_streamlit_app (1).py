@@ -383,45 +383,44 @@ if uploaded_file:
     ax.set_title(f"{segment_label}")
     save_figure(fig11, os.path.join(output_dir, "Figure11_TotalDepth_Boxplot.png"))
 
-    # ================== Figure 12: E. coli ==================
-fig12 = None
-if 'E_coli' in df.columns and df['E_coli'].notna().any():
-    fig12, ax = plt.subplots(figsize=(10, 6))
-    ax.boxplot(
-        series_by_site(df, site_order, 'E_coli'),
-        patch_artist=False, whis=1.5,
-        medianprops=dict(color='black'),
-        whiskerprops=dict(color='black'),
-        capprops=dict(color='black'),
-        boxprops=dict(color='black'),
-        flierprops=dict(
-            marker='o',
-            markersize=4,
-            markerfacecolor='black',
-            markeredgecolor='black'
-        )
-    )
-
-    style_axes(ax, 'Site ID', 'E. coli (#/100 mL)', site_order)
-
-    # خط معیار Geometric Mean
-    ax.axhline(WQS_ECOLI_GM, linestyle='--', color='red', zorder=10)
-    ax.text(
-        1, WQS_ECOLI_GM * 1.02,
-        'GM WQS', color='red', va='bottom', zorder=11
-    )
-
-    # خط معیار Single Sample
-    ax.axhline(WQS_ECOLI_SINGLE, linestyle=':', color='red', zorder=10)
-    ax.text(
-        1, WQS_ECOLI_SINGLE * 1.02,
-        'Single-sample WQS', color='red', va='bottom', zorder=11
-    )
-
-    ax.set_title(f"{segment_label}")
-    save_figure(fig12, os.path.join(output_dir, "Figure12_Ecoli_Boxplot.png"))
-
     
+    # ================== Figure 12: E. coli ==================
+    fig12 = None
+    if 'E_coli' in df.columns and df['E_coli'].notna().any():
+        fig12, ax = plt.subplots(figsize=(10, 6))
+        ax.boxplot(
+            series_by_site(df, site_order, 'E_coli'),
+            patch_artist=False, whis=1.5,
+            medianprops=dict(color='black'),
+            whiskerprops=dict(color='black'),
+            capprops=dict(color='black'),
+            boxprops=dict(color='black'),
+            flierprops=dict(
+                marker='o',
+                markersize=4,
+                markerfacecolor='black',
+                markeredgecolor='black'
+            )
+        )
+
+        style_axes(ax, 'Site ID', 'E. coli (#/100 mL)', site_order)
+
+        # خط معیار GM
+        ax.axhline(WQS_ECOLI_GM, linestyle='--', color='red', zorder=10)
+        ax.text(
+            1, WQS_ECOLI_GM * 1.02,
+            'GM WQS', color='red', va='bottom', zorder=11
+        )
+
+        # خط معیار Single sample
+        ax.axhline(WQS_ECOLI_SINGLE, linestyle=':', color='red', zorder=10)
+        ax.text(
+            1, WQS_ECOLI_SINGLE * 1.02,
+            'Single-sample WQS', color='red', va='bottom', zorder=11
+        )
+
+        ax.set_title(f"{segment_label}")
+        save_figure(fig12, os.path.join(output_dir, "Figure12_Ecoli_Boxplot.png"))    
 
     # ================== Monthly Climate (from Excel) ==================
     fig_climate = None
