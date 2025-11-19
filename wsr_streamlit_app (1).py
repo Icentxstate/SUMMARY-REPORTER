@@ -41,7 +41,7 @@ WQS_pH_MAX = st.sidebar.number_input(
     "pH — maximum (s.u.)",
     value=9.0, step=0.1, format="%.1f"
 )
-# =========================
+
 WQS_ECOLI_GM = st.sidebar.number_input(
     "E. coli – Geometric Mean (#/100 mL)",
     value=126.0, step=1.0, format="%.0f",
@@ -53,7 +53,6 @@ WQS_ECOLI_SINGLE = st.sidebar.number_input(
     value=399.0, step=1.0, format="%.0f",
     help="Single-sample maximum criterion (e.g., 399 for PCR1)."
 )
-#====================
 
 st.sidebar.caption(
     f"Using WQS for: **{segment_label}**\n\n"
@@ -63,7 +62,6 @@ st.sidebar.caption(
     f"- pH {WQS_pH_MIN:.1f}–{WQS_pH_MAX:.1f}\n"
     f"- E. coli: {WQS_ECOLI_GM:.0f} GM, {WQS_ECOLI_SINGLE:.0f} single sample (#/100 mL)"
 )
-
 
 # ================== Helpers ==================
 def get_col(df, *candidates):
@@ -405,14 +403,14 @@ if uploaded_file:
 
         style_axes(ax, 'Site ID', 'E. coli (#/100 mL)', site_order)
 
-        # خط معیار GM
+        # خط معیار Geometric Mean
         ax.axhline(WQS_ECOLI_GM, linestyle='--', color='red', zorder=10)
         ax.text(
             1, WQS_ECOLI_GM * 1.02,
             'GM WQS', color='red', va='bottom', zorder=11
         )
 
-        # خط معیار Single sample
+        # خط معیار Single Sample
         ax.axhline(WQS_ECOLI_SINGLE, linestyle=':', color='red', zorder=10)
         ax.text(
             1, WQS_ECOLI_SINGLE * 1.02,
@@ -420,7 +418,8 @@ if uploaded_file:
         )
 
         ax.set_title(f"{segment_label}")
-        save_figure(fig12, os.path.join(output_dir, "Figure12_Ecoli_Boxplot.png"))    
+        save_figure(fig12, os.path.join(output_dir, "Figure12_Ecoli_Boxplot.png"))
+
 
     # ================== Monthly Climate (from Excel) ==================
     fig_climate = None
@@ -445,8 +444,9 @@ if uploaded_file:
     else:
         st.warning(" اقلیم ماهانه پیدا نشد یا ستون‌های لازم وجود ندارد.")
 
+    
     # ================== Summary Table (Table 6 style) ==================
-        param_map = {
+    param_map = {
         'Air Temp Rounded': 'Air Temperature (°C)',
         'Water Temp Rounded': 'Water Temperature (°C)',
         'DO_avg': 'Dissolved Oxygen (mg/L)',
@@ -464,7 +464,7 @@ if uploaded_file:
     for col, pname in param_map.items():
         if col in df.columns and df[col].notna().any():
 
-            # برای E. coli: Geometric Mean و Range
+            # رفتار متفاوت برای E. coli
             if col == 'E_coli':
                 stats = ['Geometric Mean', 'Range']
             else:
@@ -480,9 +480,9 @@ if uploaded_file:
                         row[s] = np.nan
                         continue
 
-                    # رفتار ویژه برای E. coli
+                    # Geometric Mean برای E. coli
                     if col == 'E_coli' and stat == 'Geometric Mean':
-                        # جلوگیری از log(0) با offset کوچک (0.5) برای مقادیر صفر/منفی
+                        # جلوگیری از log(0) با یک offset کوچک
                         vals_adj = np.where(vals <= 0, 0.5, vals)
                         gm = float(np.exp(np.mean(np.log(vals_adj))))
                         row[s] = gm
@@ -498,6 +498,24 @@ if uploaded_file:
 
                 summary_rows.append(row)
 
+    summary_df = pd.DataFrame(summary_rows)
+
+    value_cols = [c for c in summary_df.columns if c not in ['Parameter', 'Statistic']]
+    for c in value_cols:
+        summary_df[c] = pd.to_numeric(summary_df[c], errors='coerce')
+    summary_df[value_cols] = summary_df[value_cols].round(2)
+
+    st.subheader(" Summary Statistics (Table 6 style)")
+    if not summary_df.empty:
+        st.dataframe(summary_df.style.format({c: "{:.2f}" for c in value_cols}, na_rep="ND"))
+    else:
+        st.info("No numeric data found to summarize for Table 6.")
+
+    table6_path = os.path.join(output_dir, "Table6_Summary.xlsx")
+    if not summary_df.empty:
+        save_df = summary_df.copy()
+        save_df[value_cols] = save_df[value_cols].applymap(lambda v: v if pd.notna(v) else "ND")
+        save_df.to_excel(table6_path, index=False)
 
     # ================== ZIP download ==================
     st.markdown("##  Download All Results (Figures + Table 6)")
