@@ -1,4 +1,4 @@
-## WSR_Graph_Generator.py
+# WSR_Graph_Generator.py
 # Watershed Summary Report Graph Generator (Exact Style)
 # Designed to take cleaned outputs from the Validation App (CSV or Excel)
 
@@ -20,23 +20,39 @@ uploaded_file = st.file_uploader(
 
 # ================== Manual WQS inputs (per run) ==================
 st.sidebar.header("Water Quality Standards (Manual Input)")
-segment_label = st.sidebar.text_input("Segment label (for your reference)", value="")
+segment_label = st.sidebar.text_input(
+    "Segment label (for your reference)",
+    value=""
+)
 
 WQS_TEMP = st.sidebar.number_input(
     "Temperature threshold (°C)",
     value=33.9, step=0.1, format="%.1f",
     help="Upper guideline temperature for this segment."
 )
-WQS_TDS = st.sidebar.number_input("Total Dissolved Solids (mg/L)", value=600.0, step=10.0, format="%.0f")
-WQS_DO = st.sidebar.number_input("Dissolved Oxygen (mg/L) — minimum", value=5.0, step=0.1, format="%.1f")
-WQS_pH_MIN = st.sidebar.number_input("pH — minimum (s.u.)", value=6.5, step=0.1, format="%.1f")
-WQS_pH_MAX = st.sidebar.number_input("pH — maximum (s.u.)", value=9.0, step=0.1, format="%.1f")
+WQS_TDS = st.sidebar.number_input(
+    "Total Dissolved Solids (mg/L)",
+    value=600.0, step=10.0, format="%.0f"
+)
+WQS_DO = st.sidebar.number_input(
+    "Dissolved Oxygen (mg/L) — minimum",
+    value=5.0, step=0.1, format="%.1f"
+)
+WQS_pH_MIN = st.sidebar.number_input(
+    "pH — minimum (s.u.)",
+    value=6.5, step=0.1, format="%.1f"
+)
+WQS_pH_MAX = st.sidebar.number_input(
+    "pH — maximum (s.u.)",
+    value=9.0, step=0.1, format="%.1f"
+)
 
 WQS_ECOLI_GM = st.sidebar.number_input(
     "E. coli – Geometric Mean (#/100 mL)",
     value=126.0, step=1.0, format="%.0f",
     help="Geometric mean criterion (e.g., 126 for PCR1)."
 )
+
 WQS_ECOLI_SINGLE = st.sidebar.number_input(
     "E. coli – Single Sample (#/100 mL)",
     value=399.0, step=1.0, format="%.0f",
@@ -54,12 +70,14 @@ st.sidebar.caption(
 
 # ================== Helpers ==================
 def get_col(df, *candidates):
+    """Return first matching column from candidates; else NaN Series."""
     for c in candidates:
         if c in df.columns:
             return df[c]
     return pd.Series([np.nan] * len(df), index=df.index)
 
 def find_first_name(df, names):
+    """Return the first column name from 'names' that exists in df."""
     for n in names:
         if n in df.columns:
             return n
@@ -72,17 +90,7 @@ def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
 
 def save_figure(fig, path):
-    """
-    Safe save:
-    1) try tight bbox (nice looking)
-    2) if it explodes size (legend too long), retry normally
-    """
-    try:
-        fig.savefig(path, dpi=300, bbox_inches='tight')
-    except Exception as e:
-        # fallback without tight
-        fig.savefig(path, dpi=300)
-        st.warning(f"Saved without tight bbox due to: {type(e).__name__}")
+    fig.savefig(path, dpi=300, bbox_inches='tight')
 
 def style_axes(ax, xlabel='', ylabel='', site_order=None):
     ax.set_xlabel(xlabel)
@@ -98,6 +106,7 @@ def style_axes(ax, xlabel='', ylabel='', site_order=None):
 def series_by_site(df, site_order, ycol):
     return [df.loc[df['Site ID'].eq(s), ycol].dropna().values for s in site_order]
 
+# ===== Monthly Climate builder (from dataset) =====
 def build_monthly_climate_from_df(df):
     date_col = find_first_name(df, ['Sample Date', 'Date', 'SampleDate', 'Datetime'])
     if date_col is None:
@@ -159,6 +168,7 @@ def build_monthly_climate_from_df(df):
 
 # ================== Main ==================
 if uploaded_file:
+    # ---------- Read (CSV or Excel) ----------
     file_name = uploaded_file.name.lower()
     if file_name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
@@ -169,49 +179,105 @@ if uploaded_file:
     st.write("Preview of input data (first 20 rows):")
     st.dataframe(df.head(20))
 
-    # ---------- Prepare columns ----------
+    # ---------- Prepare columns (mapping from cleaned file) ----------
     df['Sample Date'] = pd.to_datetime(
         get_col(df, 'Sample Date', 'Date', 'SampleDate'),
         errors='coerce'
     )
 
-    # IMPORTANT FIX 1:
-    # don't keep full "ID: Name", keep only numeric ID for plotting
-    raw_site = get_col(df, 'Site ID: Site Name', 'Site ID', 'Station ID').astype(str).str.strip()
-    df['Site ID'] = raw_site.apply(lambda x: x.split(':')[0].strip() if ':' in x else x)
+    df['Site ID'] = (
+        get_col(df, 'Site ID: Site Name', 'Site ID', 'Station ID')
+        .astype(str)
+        .str.strip()
+    )
 
-    df['Air Temp Rounded'] = to_num(get_col(df, 'Air Temp Rounded', 'Air Temperature (° C)', 'Air Temperature (°C)'))
-    df['Water Temp Rounded'] = to_num(get_col(df, 'Water Temp Rounded', 'Water Temperature (° C)', 'Water Temperature (°C)'))
 
-    cond_col = get_col(df,
+    # ================== UNIQUE SITE ID HANDLING ==================
+    desc_col = find_first_name(
+        df,
+        ['Description', 'Site Description', 'Site Desc', 'Location', 'Description ']
+    )
+
+    # Temperatures
+    df['Air Temp Rounded'] = to_num(
+        get_col(df,
+                'Air Temp Rounded',
+                'Air Temperature (° C)',
+                'Air Temperature (°C)')
+    )
+    df['Water Temp Rounded'] = to_num(
+        get_col(df,
+                'Water Temp Rounded',
+                'Water Temperature (° C)',
+                'Water Temperature (°C)')
+    )
+
+    # Conductivity
+    cond_col = get_col(
+        df,
         'Conductivity (µS/cm)', 'Conductivity (uS/cm)',
         'Conductivity (?S/cm)', 'Conductivity',
         'Conductivity (μS/cm)'
     )
     df['Conductivity'] = to_num(cond_col)
 
+    # TDS: use existing if present, else compute from conductivity
     tds_existing = get_col(df, 'TDS (mg/L)', 'Total Dissolved Solids (mg/L)')
     if tds_existing.notna().sum() > 0:
         df['TDS (mg/L)'] = to_num(tds_existing)
     else:
         df['TDS (mg/L)'] = df['Conductivity'] * 0.65
 
-    df['DO_avg'] = to_num(get_col(df, 'Dissolved Oxygen (mg/L) Average', 'DO_avg', 'Dissolved Oxygen (mg/L)'))
-    df['pH'] = to_num(get_col(df, 'pH Rounded', 'pH (standard units)', 'pH'))
+    # DO
+    df['DO_avg'] = to_num(
+        get_col(df,
+                'Dissolved Oxygen (mg/L) Average',
+                'DO_avg',
+                'Dissolved Oxygen (mg/L)')
+    )
+    # pH
+    df['pH'] = to_num(
+        get_col(df,
+                'pH Rounded',
+                'pH (standard units)',
+                'pH')
+    )
 
-    df['Secchi'] = to_num(get_col(df, 'Secchi Disk Transparency - Average', 'Secchi Disk Transparency (m)', 'Secchi'))
-    df['Transparency Tube'] = to_num(get_col(df, 'Transparency Tube (meters)', 'Transparency Tube (m)'))
-    df['Total Depth'] = to_num(get_col(df, 'Total Depth (meters)', 'Total Depth (m)', 'Depth (m)'))
+    # Transparency, depth
+    df['Secchi'] = to_num(
+        get_col(df,
+                'Secchi Disk Transparency - Average',
+                'Secchi Disk Transparency (m)',
+                'Secchi')
+    )
+    df['Transparency Tube'] = to_num(
+        get_col(df,
+                'Transparency Tube (meters)',
+                'Transparency Tube (m)')
+    )
+    df['Total Depth'] = to_num(
+        get_col(df,
+                'Total Depth (meters)',
+                'Total Depth (m)',
+                'Depth (m)')
+    )
 
-    ecoli_col = get_col(df,
-        'E. coli (MPN/100 mL)', 'E. coli (#/100 mL)',
-        'E. coli', 'E.coli (MPN/100 mL)', 'E Coli (MPN/100 mL)',
-        'E_coli', 'E. Coli Average'
+    # E. coli
+    ecoli_col = get_col(
+        df,
+        'E. coli (MPN/100 mL)',
+        'E. coli (#/100 mL)',
+        'E. coli',
+        'E.coli (MPN/100 mL)',
+        'E Coli (MPN/100 mL)',
+        'E_coli',  # from cleaned CSV
+        'E. Coli Average'
     )
     df['E_coli'] = to_num(ecoli_col)
 
     # Drop rows without Site ID
     df = df[df['Site ID'].notna() & df['Site ID'].ne('')].copy()
+
     if df.empty:
         st.error("No valid Site ID values found after cleaning. Please check your input file.")
         st.stop()
@@ -220,30 +286,30 @@ if uploaded_file:
     output_dir = "wsr_figures"
     ensure_dir(output_dir)
 
+    # Keep site order as in file
     site_order = list(pd.unique(df['Site ID']))
 
     # ================== Figure 6: Water Temperature ==================
     fig6, ax = plt.subplots(figsize=(14, 6))
     for s in site_order:
         dsi = df[df['Site ID'].eq(s)]
-        ax.scatter(dsi['Sample Date'], dsi['Water Temp Rounded'],
-                   s=40, marker='o', label=s, alpha=0.9)
-
+        ax.scatter(
+            dsi['Sample Date'],
+            dsi['Water Temp Rounded'],
+            s=40,
+            marker='o',
+            label=s,
+            alpha=0.9
+        )
     ax.axhline(WQS_TEMP, linestyle='--', color='red', linewidth=1.5, zorder=10)
     if df['Sample Date'].notna().any():
         xmin = df['Sample Date'].min()
         ax.text(xmin, WQS_TEMP + 0.5, 'WQS', color='red', va='bottom', zorder=11)
-
     ax.set_xlabel('Sample Date')
     ax.set_ylabel('Water Temperature (°C)')
     ax.set_title(f"{segment_label}")
-
-    # IMPORTANT FIX 2:
-    # keep legend inside to avoid huge tight bbox
-    ax.legend(title='Site ID', loc='upper right')
-
+    ax.legend(title='Site ID', loc='center left', bbox_to_anchor=(1.0, 0.5))
     save_figure(fig6, os.path.join(output_dir, "Figure6_WaterTemperature.png"))
-
 
     # ================== Figure 7: TDS ==================
     fig7, ax = plt.subplots(figsize=(10, 6))
